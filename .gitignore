@@ -1,0 +1,10 @@
+# OS and editor files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Environment files (if any at root)
+.env
+.env.*
+!.env*.example
