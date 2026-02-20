@@ -7,10 +7,97 @@ export default class extends Controller {
     ingestUrl: String,
     computeUrl: String,
     recapUrl: String,
-    playerId: Number
+    playerId: Number,
+    recapStatuses: Object
   }
 
   static targets = ["yearSelect", "generateButton", "viewButton", "computeButton", "message", "recapResults"]
+
+  connect() {
+    this.updateStatusDisplay()
+    this.startPollingIfGenerating()
+  }
+
+  disconnect() {
+    this.stopPolling()
+  }
+
+  startPollingIfGenerating() {
+    this.stopPolling()
+    const statuses = this.recapStatusesValue || {}
+    const year = this.hasYearSelectTarget ? this.yearSelectTarget.value : new Date().getFullYear()
+    if (statuses[String(year)] === "generating") {
+      this.pollInterval = setInterval(() => this.pollForReady(year), 10000)
+    }
+  }
+
+  stopPolling() {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval)
+      this.pollInterval = null
+    }
+  }
+
+  async pollForReady(year) {
+    if (!this.recapUrlValue) return
+    const url = this.recapUrlValue.replace("YEAR", year)
+    try {
+      const response = await fetch(url, { headers: { "Accept": "application/json" } })
+      if (!response.ok) return
+      const data = await response.json().catch(() => ({}))
+      const hasData = (data.most_played_with?.length || data.most_beat_us?.length || (data.total_pings ?? 0) > 0 || (data.total_game_seconds ?? 0) > 0 || (data.total_gold_spent ?? 0) > 0 || (data.fav_items?.length ?? 0) > 0) ||
+        (data.extra_stats && Object.values(data.extra_stats).some((v) => v != null && Number(v) > 0)) ||
+        (data.our_team_bans?.length ?? 0) > 0 || (data.enemy_team_bans?.length ?? 0) > 0 ||
+        (data.total_kills ?? 0) > 0 || (data.total_deaths ?? 0) > 0 || (data.total_assists ?? 0) > 0
+      if (hasData) {
+        this.stopPolling()
+        this.recapStatusesValue = { ...(this.recapStatusesValue || {}), [year]: "ready" }
+        this.updateStatusDisplay()
+        this.showMessage("Recap is ready! Click \"View recap\" to see it.", "success")
+      }
+    } catch (_err) {
+      // ignore network errors, will retry next poll
+    }
+  }
+
+  updateStatusDisplay() {
+    const statuses = this.recapStatusesValue || {}
+    const year = this.hasYearSelectTarget ? this.yearSelectTarget.value : new Date().getFullYear()
+    const status = statuses[String(year)]
+    const isGenerating = status === "generating"
+    const isFailed = status === "failed"
+
+    this.updateButtonState("generate", isGenerating, "Generating…", "Generate recap")
+    this.updateButtonState("view", isGenerating, "Please wait…", "View recap")
+    this.updateButtonState("compute", isGenerating, "Computing…", "Compute")
+
+    if (isGenerating) {
+      this.showMessage("Recap is generating for this year. This may take a few minutes…", "success")
+      this.startPollingIfGenerating()
+    } else {
+      this.stopPolling()
+    }
+    if (isFailed) {
+      this.showMessage("Recap generation failed for this year. You can try again.", "error")
+    }
+  }
+
+  updateButtonState(name, disabled, disabledText, normalText) {
+    const targetMap = { generate: "generateButton", view: "viewButton", compute: "computeButton" }
+    const targetName = targetMap[name]
+    if (!this[`has${targetName.charAt(0).toUpperCase() + targetName.slice(1)}Target`]) return
+
+    const btn = this[`${targetName}Target`]
+    btn.disabled = disabled
+    btn.textContent = disabled ? disabledText : normalText
+    if (disabled) {
+      btn.setAttribute("aria-disabled", "true")
+      btn.title = "Please wait..."
+    } else {
+      btn.removeAttribute("aria-disabled")
+      btn.title = ""
+    }
+  }
 
   async generate(event) {
     event.preventDefault()
@@ -40,6 +127,8 @@ export default class extends Controller {
 
       const data = await response.json().catch(() => ({}))
       if (response.status === 202) {
+        if (data.recap_statuses) this.recapStatusesValue = data.recap_statuses
+        this.updateStatusDisplay()
         this.showMessage("Recap generation started! This may take a few minutes. Click \"View recap\" to check when it's ready.", "success")
       } else {
         this.showMessage(data.error || "Failed to start recap generation", "error")
@@ -48,7 +137,7 @@ export default class extends Controller {
       this.showMessage("Failed to start recap generation", "error")
     } finally {
       this.generating = false
-      this.setButtonLoading("generate", false)
+      this.updateStatusDisplay()
     }
   }
 
@@ -83,6 +172,8 @@ export default class extends Controller {
 
       const data = await response.json().catch(() => ({}))
       if (response.status === 202) {
+        if (data.recap_statuses) this.recapStatusesValue = data.recap_statuses
+        this.updateStatusDisplay()
         this.showMessage("Compute job queued. Click \"View recap\" when ready.", "success")
       } else {
         const msg = data.error || data.message || (response.status === 404 ? "Player not found." : response.status === 422 ? "Invalid year." : "Failed to queue compute")
@@ -93,10 +184,7 @@ export default class extends Controller {
       this.showMessage("Failed to queue compute: " + (err?.message || "network error"), "error")
       console.error("[Compute] Error:", err)
     } finally {
-      if (this.hasComputeButtonTarget) {
-        this.computeButtonTarget.disabled = false
-        this.computeButtonTarget.textContent = "Compute"
-      }
+      this.updateStatusDisplay()
     }
   }
 
@@ -124,6 +212,8 @@ export default class extends Controller {
       const hasBans = (data.our_team_bans?.length ?? 0) > 0 || (data.enemy_team_bans?.length ?? 0) > 0
       const hasKda = (data.total_kills ?? 0) > 0 || (data.total_deaths ?? 0) > 0 || (data.total_assists ?? 0) > 0
       if (response.ok && (data.most_played_with?.length || data.most_beat_us?.length || (data.total_pings ?? 0) > 0 || (data.total_game_seconds ?? 0) > 0 || (data.total_gold_spent ?? 0) > 0 || (data.fav_items?.length ?? 0) > 0 || hasExtraStats || hasBans || hasKda)) {
+        this.recapStatusesValue = { ...(this.recapStatusesValue || {}), [year]: "ready" }
+        this.updateStatusDisplay()
         this.showMessage("", "")
         this.renderRecap(data)
       } else if (response.ok) {

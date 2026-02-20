@@ -16,12 +16,14 @@ class PlayersController < ApplicationController
       return render json: { error: "Year must be an integer between 2010 and #{Time.current.year}" }, status: :unprocessable_entity
     end
 
+    player.update!(recap_statuses: (player.recap_statuses || {}).merge(year.to_s => "generating"))
     ComputeMostPlayedWithJob.perform_later(player.id, year)
     render json: {
       status: "queued",
       player_id: player.id,
       year: year,
-      message: "ComputeMostPlayedWithJob enqueued"
+      message: "ComputeMostPlayedWithJob enqueued",
+      recap_statuses: player.reload.recap_statuses
     }, status: :accepted
   end
 
@@ -38,12 +40,14 @@ class PlayersController < ApplicationController
       return render json: { error: "Year must be an integer between 2010 and #{Time.current.year}" }, status: :unprocessable_entity
     end
 
+    player.update!(recap_statuses: (player.recap_statuses || {}).merge(year.to_s => "generating"))
     job = IngestYearJob.perform_later(player.id, year)
     render json: {
       status: "queued",
       player_id: player.id,
       year: year,
-      job_id: job.job_id
+      job_id: job.job_id,
+      recap_statuses: player.reload.recap_statuses
     }, status: :accepted
   end
 

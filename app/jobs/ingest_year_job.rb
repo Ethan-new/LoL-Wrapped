@@ -3,6 +3,10 @@
 class IngestYearJob < ApplicationJob
   queue_as :default
 
+  # Delay between match-detail API calls. Riot: 100 req/120s sustained.
+  # 1.2s ≈ 100 fetches in 2 min. Set RIOT_MATCH_DELAY in ENV to override.
+  MATCH_FETCH_DELAY_SECONDS = (ENV["RIOT_MATCH_DELAY"] || 1.2).to_f
+
   def perform(player_id, year)
     player = Player.find_by(id: player_id)
     return unless player
@@ -32,14 +36,25 @@ class IngestYearJob < ApplicationJob
 
       break if match_ids.blank?
 
-      match_ids.each do |match_uid|
-        match_data = riot_client.fetch_match(match_uid: match_uid, region: region)
-        game_start_ms = match_data.dig(:info, :gameStartTimestamp)
-        game_start = game_start_ms ? Time.at(game_start_ms / 1000.0).utc : nil
+      # Batch lookup: one query instead of N to find which matches we already have
+      existing_by_uid = Match.where(match_uid: match_ids).index_by(&:match_uid)
 
-        unless game_start
-          Rails.logger.warn "[IngestYearJob] No gameStartTimestamp for match #{match_uid}"
-          next
+      match_ids.each do |match_uid|
+        existing = existing_by_uid[match_uid]
+        if existing
+          game_start = existing.game_start_at
+        else
+          match_data = riot_client.fetch_match(match_uid: match_uid, region: region)
+          sleep(MATCH_FETCH_DELAY_SECONDS)
+          game_start_ms = match_data.dig(:info, :gameStartTimestamp)
+          game_start = game_start_ms ? Time.at(game_start_ms / 1000.0).utc : nil
+
+          unless game_start
+            Rails.logger.warn "[IngestYearJob] No gameStartTimestamp for match #{match_uid}"
+            next
+          end
+
+          persist_match(player, match_uid, region, game_start, year, match_data)
         end
 
         if game_start >= end_time
@@ -52,7 +67,6 @@ class IngestYearJob < ApplicationJob
         end
 
         # Include: start_time <= game_start < end_time
-        persist_match(player, match_uid, region, game_start, year, match_data)
         match_uids_for_year << match_uid
       end
 
@@ -67,12 +81,21 @@ class IngestYearJob < ApplicationJob
     Rails.logger.info "[IngestYearJob] Completed for player #{player_id} year #{year}, enqueued ComputeMostPlayedWithJob (#{match_uids_for_year.size} matches)"
   rescue RiotClient::NotFound, RiotClient::ApiError => e
     Rails.logger.error "[IngestYearJob] Failed for player #{player_id} year #{year}: #{e.message}"
+    mark_recap_failed(player_id, year)
     raise
   ensure
     IngestLock.new.release!(player_id)
   end
 
   private
+
+  def mark_recap_failed(player_id, year)
+    player = Player.find_by(id: player_id)
+    return unless player
+
+    statuses = (player.recap_statuses || {}).merge(year.to_s => "failed")
+    player.update_columns(recap_statuses: statuses)
+  end
 
   def persist_match(_player, match_uid, region, game_start_at, year, match_data)
     return if Match.exists?(match_uid: match_uid)

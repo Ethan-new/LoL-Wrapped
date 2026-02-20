@@ -241,8 +241,29 @@ class ComputeMostPlayedWithJob < ApplicationJob
       )
       Rails.logger.info "[ComputeMostPlayedWithJob] Upserted #{enemy_records.size} recap_enemies for player #{player_id} year #{year}"
     end
+
+    mark_recap_ready(player_id, year)
   rescue StandardError => e
     Rails.logger.error "[ComputeMostPlayedWithJob] Failed: #{e.class} #{e.message}\n#{e.backtrace.first(5).join("\n")}"
+    mark_recap_failed(player_id, year)
     raise
+  end
+
+  private
+
+  def mark_recap_ready(player_id, year)
+    player = Player.find_by(id: player_id)
+    return unless player
+
+    statuses = (player.recap_statuses || {}).merge(year.to_s => "ready")
+    player.update_columns(recap_statuses: statuses)
+  end
+
+  def mark_recap_failed(player_id, year)
+    player = Player.find_by(id: player_id)
+    return unless player
+
+    statuses = (player.recap_statuses || {}).merge(year.to_s => "failed")
+    player.update_columns(recap_statuses: statuses)
   end
 end

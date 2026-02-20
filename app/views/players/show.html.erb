@@ -74,22 +74,22 @@
       </dl>
     </div>
 
-    <div class="space-y-3 border-t border-stone-600 pt-6" data-controller="recap" data-recap-ingest-url-value="<%= ingest_year_player_path(@player.id) %>" data-recap-compute-url-value="<%= compute_recap_player_path(@player.id) %>" data-recap-recap-url-value="/players/<%= @player.id %>/recap/YEAR">
+    <div class="space-y-3 border-t border-stone-600 pt-6" data-controller="recap" data-recap-ingest-url-value="<%= ingest_year_player_path(@player.id) %>" data-recap-compute-url-value="<%= compute_recap_player_path(@player.id) %>" data-recap-recap-url-value="/players/<%= @player.id %>/recap/YEAR" data-recap-statuses-value="<%= (@player.recap_statuses || {}).to_json %>">
       <h2 class="text-lg font-semibold text-stone-200">Year Recap (Wrapped-style)</h2>
       <p class="text-sm text-stone-500">Generate your "most played with" teammates for any year. Processing happens in the background and may take a few minutes.</p>
       <div class="flex flex-wrap items-center gap-3">
-        <select data-recap-target="yearSelect" class="rounded-lg border border-stone-600 bg-stone-900 px-3 py-2 text-sm text-stone-200 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500">
+        <select data-recap-target="yearSelect" data-action="change->recap#updateStatusDisplay" class="rounded-lg border border-stone-600 bg-stone-900 px-3 py-2 text-sm text-stone-200 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500">
           <% (2010..Time.current.year).to_a.reverse.each do |y| %>
             <option value="<%= y %>" <%= "selected" if y == Time.current.year %>><%= y %></option>
           <% end %>
         </select>
-        <button type="button" data-recap-target="generateButton" data-action="click->recap#generate" class="rounded-lg border border-amber-500 bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-400 transition-colors hover:border-amber-400 hover:bg-amber-500/30 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900 disabled:opacity-75">
+        <button type="button" data-recap-target="generateButton" data-action="click->recap#generate" class="rounded-lg border border-amber-500 bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-400 transition-colors hover:border-amber-400 hover:bg-amber-500/30 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-stone-700 disabled:bg-stone-900 disabled:text-stone-500 disabled:opacity-75">
           Generate recap
         </button>
-        <button type="button" data-recap-target="viewButton" data-action="click->recap#viewRecap" class="rounded-lg border border-stone-600 px-4 py-2 text-sm font-medium text-stone-300 hover:bg-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900 disabled:opacity-75">
+        <button type="button" data-recap-target="viewButton" data-action="click->recap#viewRecap" class="rounded-lg border border-stone-600 px-4 py-2 text-sm font-medium text-stone-300 hover:bg-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-stone-700 disabled:bg-stone-900 disabled:text-stone-500 disabled:opacity-75">
           View recap
         </button>
-        <button type="button" data-recap-target="computeButton" data-action="click->recap#compute" class="rounded border border-stone-500 px-3 py-1.5 text-xs font-medium text-stone-400 hover:bg-stone-800 hover:text-stone-300" title="Recompute recap from existing match data (for testing)">
+        <button type="button" data-recap-target="computeButton" data-action="click->recap#compute" class="rounded border border-stone-500 px-3 py-1.5 text-xs font-medium text-stone-400 hover:bg-stone-800 hover:text-stone-300 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-stone-700 disabled:bg-stone-900 disabled:text-stone-500 disabled:opacity-75" title="Recompute recap from existing match data (for testing)">
           Compute
         </button>
       </div>

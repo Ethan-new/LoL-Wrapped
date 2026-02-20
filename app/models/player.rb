@@ -6,6 +6,7 @@ class Player < ApplicationRecord
   has_many :recap_year_stats, dependent: :destroy
 
   # year_match_ids (jsonb): { "2025" => ["NA1_123", ...], "2024" => [...] }
+  # recap_statuses (jsonb): { "2025" => "generating"|"ready"|"failed", "2024" => "ready", ... }
   # Data Dragon version for profile icons - update when assets stop loading
   PROFILE_ICON_BASE_URL = "https://ddragon.leagueoflegends.com/cdn/14.24.1/img/profileicon"
 
@@ -60,6 +61,16 @@ class Player < ApplicationRecord
     wins = entry["wins"] || entry[:wins] || 0
     losses = entry["losses"] || entry[:losses] || 0
     "#{wins}W #{losses}L"
+  end
+
+  def recap_status_for(year)
+    return "ready" if recap_year_stats.exists?(year: year)
+
+    (recap_statuses || {}).dig(year.to_s) || nil
+  end
+
+  def recap_generating_for?(year)
+    recap_status_for(year) == "generating"
   end
 
   private

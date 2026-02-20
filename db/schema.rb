@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_02_20_121359) do
+ActiveRecord::Schema[7.2].define(version: 2026_02_20_190059) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -40,6 +40,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_02_20_121359) do
     t.jsonb "rank_entries", default: []
     t.datetime "last_synced_at"
     t.jsonb "year_match_ids", default: {}
+    t.jsonb "recap_statuses", default: {}
     t.index ["puuid"], name: "index_players_on_puuid", unique: true
   end
 
