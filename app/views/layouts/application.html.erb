@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html class="bg-stone-950">
   <head>
     <title><%= content_for(:title) || "App" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -13,10 +13,14 @@
     <link rel="icon" href="/icon.png" type="image/png">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/icon.png">
+    <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
   </head>
 
-  <body>
-    <%= yield %>
+  <body class="min-h-screen bg-stone-950 text-stone-100">
+    <main class="container mx-auto flex min-h-screen flex-col items-center justify-center px-5 py-12">
+      <%= yield %>
+    </main>
   </body>
 </html>

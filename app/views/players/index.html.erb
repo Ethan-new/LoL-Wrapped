@@ -1,0 +1,16 @@
+<% content_for :title, "LoL Wrapped - Player Lookup" %>
+
+<div class="w-full max-w-2xl">
+  <header class="mb-12 text-center">
+    <h1 class="text-4xl font-bold tracking-tight text-amber-400">
+      LoL Wrapped
+    </h1>
+    <p class="mt-2 text-lg text-stone-400">
+      Look up your Riot account to get started
+    </p>
+  </header>
+
+  <%= turbo_frame_tag "lookup_result" do %>
+    <%= render "form" %>
+  <% end %>
+</div>

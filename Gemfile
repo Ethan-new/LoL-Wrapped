@@ -19,6 +19,9 @@ gem "jbuilder"
 # Use Redis adapter to run Action Cable in production
 gem "redis", ">= 4.0.1"
 
+# HTTP client for external API calls
+gem "faraday"
+
 # Use Sidekiq for background jobs
 gem "sidekiq"
 
@@ -53,3 +56,5 @@ group :development do
   gem "web-console"
 end
 
+
+gem "tailwindcss-rails", "~> 4.4"

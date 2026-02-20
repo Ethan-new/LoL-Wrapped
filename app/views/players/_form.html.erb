@@ -1,0 +1,21 @@
+<%= form_with url: lookup_players_path, method: :post, data: { turbo_frame: "lookup_result", controller: "lookup-form", action: "turbo:submit-start->lookup-form#submit" }, class: "space-y-6 rounded-xl bg-stone-800/50 p-8 shadow-xl" do |f| %>
+  <div class="space-y-4">
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <%= label_tag :game_name, "Game Name", class: "mb-2 block text-sm font-medium text-stone-300" %>
+        <%= text_field_tag :game_name, params[:game_name], placeholder: "SummonerName", autocomplete: "off", class: "w-full rounded-lg border border-stone-600 bg-stone-900 px-4 py-3 text-stone-100 placeholder-stone-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none" %>
+      </div>
+      <div>
+        <%= label_tag :tag_line, "Tag Line", class: "mb-2 block text-sm font-medium text-stone-300" %>
+        <%= text_field_tag :tag_line, params[:tag_line], placeholder: "NA1", autocomplete: "off", class: "w-full rounded-lg border border-stone-600 bg-stone-900 px-4 py-3 text-stone-100 placeholder-stone-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none" %>
+      </div>
+    </div>
+
+    <div>
+      <%= label_tag :region, "Region", class: "mb-2 block text-sm font-medium text-stone-300" %>
+      <%= select_tag :region, options_for_select([["Americas", "americas"], ["Europe", "europe"], ["Asia", "asia"], ["Sea", "sea"]], params[:region]), include_blank: "Select region", class: "w-full rounded-lg border border-stone-600 bg-stone-900 px-4 py-3 text-stone-100 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none" %>
+    </div>
+  </div>
+
+  <%= submit_tag "Look Up", data: { lookup_form_target: "submit" }, class: "w-full cursor-pointer rounded-lg bg-amber-500 px-4 py-3 font-semibold text-stone-900 transition-colors hover:bg-amber-400 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900 focus:outline-none disabled:cursor-not-allowed disabled:opacity-70" %>
+<% end %>

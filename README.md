@@ -1,7 +1,68 @@
 # LoL Wrapped
 
-League of Legends year-in-review (Wrapped) application.
+A League of Legends year-in-review (Wrapped) application.
 
-## Project structure
+## Tech Stack
 
-- **[backend/](./backend/)** - Rails 7 API (Postgres, Redis, Sidekiq)
+- **Rails 7** + Ruby 3.2
+- **PostgreSQL** - Database
+- **Redis** - Caching & Action Cable
+- **Sidekiq** - Background jobs
+
+## Prerequisites
+
+- Docker & Docker Compose (for Postgres + Redis)
+- Ruby 3.2+ (via rbenv, rvm, or asdf)
+
+## Setup
+
+All commands below assume you're in the project root:
+
+### 1. Start Postgres & Redis
+
+```bash
+docker compose up -d
+```
+
+### 2. Install dependencies & create database
+
+```bash
+bundle install
+rails db:create db:migrate
+```
+
+### 3. Run the app
+
+**Option A: Use Foreman (runs web + Sidekiq + Tailwind together)**
+
+```bash
+gem install foreman
+bin/dev
+```
+
+**Option B: Run in separate terminals**
+
+```bash
+# Terminal 1 - Rails server
+bin/rails server
+
+# Terminal 2 - Sidekiq
+bundle exec sidekiq
+
+# Terminal 3 (optional) - Tailwind CSS watcher
+bin/rails tailwindcss:watch
+```
+
+## URLs
+
+- **App**: http://localhost:3000
+- **Sidekiq dashboard**: http://localhost:3000/sidekiq
+
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
+| `PGHOST` | `localhost` | Postgres host |
+| `PGPORT` | `5432` | Postgres port |
+| `RIOT_API_KEY` | — | Riot API key (required for player lookup) |
