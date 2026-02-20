@@ -22,6 +22,12 @@
           <dt class="text-xs font-medium uppercase tracking-wider text-stone-500">Region</dt>
           <dd class="mt-1 capitalize text-stone-200"><%= player.region %></dd>
         </div>
+        <% if player.summoner_level.present? %>
+          <div>
+            <dt class="text-xs font-medium uppercase tracking-wider text-stone-500">Summoner Level</dt>
+            <dd class="mt-1 text-stone-200"><%= player.summoner_level %></dd>
+          </div>
+        <% end %>
       </dl>
     </div>
 

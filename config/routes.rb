@@ -13,9 +13,14 @@ Rails.application.routes.draw do
   get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
 
   root "players#index"
-  resources :players, only: [] do
-    collection do
-      post :lookup
-    end
-  end
+  post "players/lookup", to: "players#lookup"
+
+  post "players/:id/ingest_year", to: "players#ingest_year", as: :ingest_year_player, constraints: { id: /\d+/ }
+  post "players/:id/compute_recap", to: "players#compute_recap", as: :compute_recap_player, constraints: { id: /\d+/ }
+  get "players/:id/recap/:year", to: "recaps#show", as: :player_recap, constraints: { id: /\d+/, year: /\d{4}/ }
+
+  get "players/:region/:riot_id_slug", to: "players#show", as: :player,
+      constraints: { region: /na|eu|asia|sea/, riot_id_slug: /[^\/]+/ }
+  patch "players/:region/:riot_id_slug", to: "players#update", as: :update_player,
+        constraints: { region: /na|eu|asia|sea/, riot_id_slug: /[^\/]+/ }
 end

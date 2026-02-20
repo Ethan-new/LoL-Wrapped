@@ -1,4 +1,4 @@
-<%= form_with url: lookup_players_path, method: :post, data: { turbo_frame: "lookup_result", controller: "lookup-form", action: "turbo:submit-start->lookup-form#submit" }, class: "space-y-6 rounded-xl bg-stone-800/50 p-8 shadow-xl" do |f| %>
+<%= form_with url: players_lookup_path, method: :post, data: { turbo_frame: "_top", controller: "lookup-form", action: "turbo:submit-start->lookup-form#submit" }, class: "space-y-6 rounded-xl bg-stone-800/50 p-8 shadow-xl" do |f| %>
   <div class="space-y-4">
     <div class="grid gap-4 sm:grid-cols-2">
       <div>
@@ -13,7 +13,7 @@
 
     <div>
       <%= label_tag :region, "Region", class: "mb-2 block text-sm font-medium text-stone-300" %>
-      <%= select_tag :region, options_for_select([["Americas", "americas"], ["Europe", "europe"], ["Asia", "asia"], ["Sea", "sea"]], params[:region]), include_blank: "Select region", class: "w-full rounded-lg border border-stone-600 bg-stone-900 px-4 py-3 text-stone-100 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none" %>
+      <%= select_tag :region, options_for_select([["NA", "na"], ["EU", "eu"], ["Asia", "asia"], ["Sea", "sea"]], params[:region]), include_blank: "Select region", class: "w-full rounded-lg border border-stone-600 bg-stone-900 px-4 py-3 text-stone-100 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none" %>
     </div>
   </div>
 

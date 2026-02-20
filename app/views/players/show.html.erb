@@ -1,0 +1,110 @@
+<% content_for :title, "#{@player.riot_id} - LoL Wrapped" %>
+
+<div class="w-full max-w-2xl" data-controller="update-player" data-update-player-url-value="<%= update_player_path(region: @player.path_params[:region], riot_id_slug: @player.riot_id_slug) %>" data-update-player-last-updated-value="<%= @player.last_synced_at&.iso8601 %>">
+  <div class="mb-8 flex items-center justify-between gap-4">
+    <%= link_to root_path, class: "text-sm font-medium text-stone-400 transition-colors hover:text-stone-200" do %>
+      ← Back to lookup
+    <% end %>
+    <button type="button" data-action="click->update-player#update" data-update-player-target="button" class="rounded-lg border border-stone-600 bg-stone-800 px-4 py-2 text-sm font-medium text-stone-200 transition-colors hover:border-amber-500 hover:bg-stone-700 hover:text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-stone-700 disabled:bg-stone-900 disabled:text-stone-500 disabled:opacity-75">
+      Update profile
+    </button>
+  </div>
+
+  <div class="space-y-6 rounded-xl bg-stone-800/50 p-8 shadow-xl">
+    <div class="flex items-center gap-3">
+      <div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber-500/20">
+        <% if @player.profile_icon_url.present? %>
+          <%= image_tag @player.profile_icon_url, alt: @player.riot_id, class: "h-full w-full object-cover" %>
+        <% else %>
+          <span class="text-2xl font-bold text-amber-400">
+            <%= @player.riot_id.to_s[0].upcase %>
+          </span>
+        <% end %>
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold text-stone-100"><%= @player.riot_id %></h1>
+        <p class="text-sm text-stone-400">
+          Region: <span class="text-stone-300"><%= @player.region_display %></span>
+          <% if @player.summoner_level.present? %>
+            • Level <%= @player.summoner_level %>
+          <% end %>
+          <% if @player.solo_rank_entry.present? %>
+            • <span class="font-medium text-amber-400"><%= @player.rank_display(@player.solo_rank_entry) %></span>
+          <% end %>
+        </p>
+      </div>
+    </div>
+
+    <div class="space-y-3 rounded-lg bg-stone-900/50 p-4">
+      <dl class="grid gap-3 sm:grid-cols-2">
+        <div>
+          <dt class="text-xs font-medium uppercase tracking-wider text-stone-500">Riot ID</dt>
+          <dd class="mt-1 font-mono text-lg font-semibold text-amber-400"><%= @player.riot_id %></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-medium uppercase tracking-wider text-stone-500">Region</dt>
+          <dd class="mt-1 text-stone-200"><%= @player.region_display %></dd>
+        </div>
+        <% if @player.summoner_level.present? %>
+          <div>
+            <dt class="text-xs font-medium uppercase tracking-wider text-stone-500">Summoner Level</dt>
+            <dd class="mt-1 text-stone-200"><%= @player.summoner_level %></dd>
+          </div>
+        <% end %>
+        <% if @player.revision_date.present? %>
+          <div>
+            <dt class="text-xs font-medium uppercase tracking-wider text-stone-500">Profile Updated</dt>
+            <dd class="mt-1 text-stone-200"><%= Time.at(@player.revision_date / 1000).strftime("%b %d, %Y") %></dd>
+          </div>
+        <% end %>
+        <% if @player.solo_rank_entry.present? %>
+          <div class="sm:col-span-2">
+            <dt class="text-xs font-medium uppercase tracking-wider text-stone-500">Solo / Duo</dt>
+            <dd class="mt-1 font-semibold text-amber-400"><%= @player.rank_display(@player.solo_rank_entry) %></dd>
+            <dd class="mt-0.5 text-sm text-stone-400"><%= @player.rank_wins_losses(@player.solo_rank_entry) %></dd>
+          </div>
+        <% end %>
+        <% if @player.flex_rank_entry.present? %>
+          <div class="sm:col-span-2">
+            <dt class="text-xs font-medium uppercase tracking-wider text-stone-500">Flex 5v5</dt>
+            <dd class="mt-1 font-semibold text-amber-400"><%= @player.rank_display(@player.flex_rank_entry) %></dd>
+            <dd class="mt-0.5 text-sm text-stone-400"><%= @player.rank_wins_losses(@player.flex_rank_entry) %></dd>
+          </div>
+        <% end %>
+      </dl>
+    </div>
+
+    <div class="space-y-3 border-t border-stone-600 pt-6" data-controller="recap" data-recap-ingest-url-value="<%= ingest_year_player_path(@player.id) %>" data-recap-compute-url-value="<%= compute_recap_player_path(@player.id) %>" data-recap-recap-url-value="/players/<%= @player.id %>/recap/YEAR">
+      <h2 class="text-lg font-semibold text-stone-200">Year Recap (Wrapped-style)</h2>
+      <p class="text-sm text-stone-500">Generate your "most played with" teammates for any year. Processing happens in the background and may take a few minutes.</p>
+      <div class="flex flex-wrap items-center gap-3">
+        <select data-recap-target="yearSelect" class="rounded-lg border border-stone-600 bg-stone-900 px-3 py-2 text-sm text-stone-200 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500">
+          <% (2010..Time.current.year).to_a.reverse.each do |y| %>
+            <option value="<%= y %>" <%= "selected" if y == Time.current.year %>><%= y %></option>
+          <% end %>
+        </select>
+        <button type="button" data-recap-target="generateButton" data-action="click->recap#generate" class="rounded-lg border border-amber-500 bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-400 transition-colors hover:border-amber-400 hover:bg-amber-500/30 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900 disabled:opacity-75">
+          Generate recap
+        </button>
+        <button type="button" data-recap-target="viewButton" data-action="click->recap#viewRecap" class="rounded-lg border border-stone-600 px-4 py-2 text-sm font-medium text-stone-300 hover:bg-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900 disabled:opacity-75">
+          View recap
+        </button>
+        <button type="button" data-recap-target="computeButton" data-action="click->recap#compute" class="rounded border border-stone-500 px-3 py-1.5 text-xs font-medium text-stone-400 hover:bg-stone-800 hover:text-stone-300" title="Recompute recap from existing match data (for testing)">
+          Compute
+        </button>
+      </div>
+      <p data-recap-target="message" class="hidden text-sm"></p>
+      <div data-recap-target="recapResults" class="hidden space-y-2"></div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3 border-t border-stone-600 pt-6" data-controller="share-url" data-share-url-url-value="<%= player_url(@player) %>">
+      <span class="text-sm text-stone-500">Share this profile:</span>
+      <div class="flex flex-1 min-w-0 items-center gap-2 rounded-lg bg-stone-900 px-3 py-2">
+        <code class="truncate text-sm text-stone-300"><%= player_url(@player) %></code>
+        <button type="button" data-action="click->share-url#copy" class="shrink-0 rounded px-2 py-1 text-xs font-medium text-amber-400 hover:bg-stone-800" title="Copy link">Copy</button>
+      </div>
+    </div>
+
+    <%= link_to "Look up another player", root_path, class: "inline-flex items-center gap-2 rounded-lg border border-stone-600 bg-stone-800 px-4 py-2 text-sm font-medium text-stone-200 transition-colors hover:border-stone-500 hover:bg-stone-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900" %>
+  </div>
+</div>
