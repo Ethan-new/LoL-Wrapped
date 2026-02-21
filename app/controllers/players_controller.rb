@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class PlayersController < ApplicationController
-  skip_before_action :verify_authenticity_token, if: -> { request.format.json? }
   skip_before_action :allow_browser, if: -> { request.format.json? }, raise: false
 
   def index
