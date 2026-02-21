@@ -25,6 +25,9 @@ gem "faraday"
 # Use Sidekiq for background jobs
 gem "sidekiq"
 
+# Rate limiting for API abuse protection
+gem "rack-attack"
+
 # Use Kredis to get higher-level data types in Redis [https://github.com/rails/kredis]
 # gem "kredis"
 
