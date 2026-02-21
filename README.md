@@ -4,7 +4,7 @@ A League of Legends year-in-review (Wrapped) application.
 
 ## Tech Stack
 
-- **Rails 7** + Ruby 3.2
+- **Rails 8.1** + Ruby 3.2
 - **PostgreSQL** - Database
 - **Redis** - Caching & Action Cable
 - **Sidekiq** - Background jobs
@@ -60,61 +60,9 @@ bin/rails tailwindcss:watch
 
 ## Environment variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RIOT_API_KEY` | — | Riot API key (required for player lookup and ingestion) |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection (required for Sidekiq and rate limiting) |
-| `PGHOST` | `localhost` | Postgres host |
-| `PGPORT` | `5432` | Postgres port |
-
-## Year recap ingestion (Wrapped-style)
-
-The app can compute "most played with" teammates for a given player and calendar year.
-
-### Run Sidekiq locally
-
-Sidekiq must be running to process ingestion jobs:
-
-```bash
-bundle exec sidekiq
-```
-
-Or use `bin/dev` to run Rails + Sidekiq + Tailwind together.
-
-### Trigger ingestion via curl
-
-First, look up a player to get their ID (e.g. from the player page URL or API). Then:
-
-```bash
-# Trigger ingestion for year 2025 (returns 202 Accepted)
-curl -X POST http://localhost:3000/players/1/ingest_year \
-  -H "Content-Type: application/json" \
-  -d '{"year": 2025}'
-```
-
-Response:
-
-```json
-{"status":"queued","player_id":1,"year":2025,"job_id":"..."}
-```
-
-### Fetch recap (after ingestion completes)
-
-```bash
-curl http://localhost:3000/players/1/recap/2025
-```
-
-Response:
-
-```json
-{
-  "player_id": 1,
-  "year": 2025,
-  "most_played_with": [
-    {"teammate_puuid": "...", "games": 42, "wins_together": 21},
-    ...
-  ]
-}
-```
-
-Results are sorted by `games` desc, then `wins_together` desc (limit 20).
+| Variable       | Default                    | Description                                               |
+| -------------- | -------------------------- | --------------------------------------------------------- |
+| `RIOT_API_KEY` | —                          | Riot API key (required for player lookup and ingestion)   |
+| `REDIS_URL`    | `redis://localhost:6379/0` | Redis connection (required for Sidekiq and rate limiting) |
+| `PGHOST`       | `localhost`                | Postgres host                                             |
+| `PGPORT`       | `5432`                     | Postgres port                                             |
