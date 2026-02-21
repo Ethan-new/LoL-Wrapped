@@ -89,8 +89,9 @@ class PlayersController < ApplicationController
       return respond_to_error("Missing required parameters", param_errors, :unprocessable_entity)
     end
 
-    riot_region = RegionMapping.riot_region(lookup_params[:region])
-    riot_id = "#{lookup_params[:game_name]}##{lookup_params[:tag_line]}"
+    normalized = normalized_lookup_params
+    riot_region = RegionMapping.riot_region(normalized[:region])
+    riot_id = "#{normalized[:game_name]}##{normalized[:tag_line]}"
     player = Player.find_by(riot_id: riot_id, region: riot_region)
 
     unless player
@@ -119,19 +120,31 @@ class PlayersController < ApplicationController
 
   def param_errors
     errors = []
-    errors << "game_name is required" if lookup_params[:game_name].blank?
-    errors << "tag_line is required" if lookup_params[:tag_line].blank?
-    errors << "region is required" if lookup_params[:region].blank?
+    normalized = normalized_lookup_params
+    errors << "game_name is required" if normalized[:game_name].blank?
+    errors << "game_name must be 3–16 characters" if normalized[:game_name].present? && !normalized[:game_name].length.between?(3, 16)
+    errors << "tag_line is required" if normalized[:tag_line].blank?
+    errors << "tag_line must be 3–5 characters" if normalized[:tag_line].present? && !normalized[:tag_line].length.between?(3, 5)
+    errors << "region is required" if normalized[:region].blank?
     errors
   end
 
   def fetch_riot_account
-    riot_region = RegionMapping.riot_region(lookup_params[:region])
+    normalized = normalized_lookup_params
+    riot_region = RegionMapping.riot_region(normalized[:region])
     RiotClient.new.fetch_account_by_riot_id(
-      game_name: lookup_params[:game_name],
-      tag_line: lookup_params[:tag_line],
+      game_name: normalized[:game_name],
+      tag_line: normalized[:tag_line],
       region: riot_region
     )
+  end
+
+  def normalized_lookup_params
+    {
+      game_name: lookup_params[:game_name].to_s.strip,
+      tag_line: lookup_params[:tag_line].to_s.strip,
+      region: lookup_params[:region]
+    }
   end
 
   def find_or_create_player(account_data)
