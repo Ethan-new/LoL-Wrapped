@@ -64,6 +64,7 @@ Fill in:
 - **RAILS_MASTER_KEY** – From your `config/master.key` file (or run `bin/rails credentials:show` locally and use the key that decrypts them)
 - **APP_DATABASE_PASSWORD** – A strong random password for Postgres (e.g. `openssl rand -hex 24`)
 - **RIOT_API_KEY** – Your Riot developer API key
+- **SIDEKIQ_USER** and **SIDEKIQ_PASSWORD** – (optional) HTTP Basic Auth for `/sidekiq`. If set, only users with these credentials can access the Sidekiq dashboard.
 
 ## 4. Configure Caddy (HTTPS)
 

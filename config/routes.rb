@@ -1,5 +1,14 @@
 Rails.application.routes.draw do
   require "sidekiq/web"
+
+  # Protect Sidekiq in production: set SIDEKIQ_USER and SIDEKIQ_PASSWORD in .env
+  if ENV["SIDEKIQ_USER"].present? && ENV["SIDEKIQ_PASSWORD"].present?
+    Sidekiq::Web.use(Rack::Auth::Basic) do |username, password|
+      ActiveSupport::SecurityUtils.secure_compare(ENV["SIDEKIQ_USER"], username) &&
+        ActiveSupport::SecurityUtils.secure_compare(ENV["SIDEKIQ_PASSWORD"], password)
+    end
+  end
+
   mount Sidekiq::Web => "/sidekiq"
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

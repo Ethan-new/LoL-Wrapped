@@ -41,6 +41,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       RIOT_API_KEY: ${RIOT_API_KEY}
       FORCE_SSL: ${FORCE_SSL:-false}
+      SIDEKIQ_USER: ${SIDEKIQ_USER:-}
+      SIDEKIQ_PASSWORD: ${SIDEKIQ_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
