@@ -4,7 +4,7 @@ A League of Legends year-in-review (Wrapped) application.
 
 ## Tech Stack
 
-- **Rails 8.1** + Ruby 3.2
+- **Rails 8.1** + Ruby 3.4.5
 - **PostgreSQL** - Database
 - **Redis** - Caching & Action Cable
 - **Sidekiq** - Background jobs
@@ -12,7 +12,7 @@ A League of Legends year-in-review (Wrapped) application.
 ## Prerequisites
 
 - Docker & Docker Compose (for Postgres + Redis)
-- Ruby 3.2+ (via rbenv, rvm, or asdf)
+- Ruby 3.4.5 (via rbenv, rvm, or asdf)
 
 ## Setup
 
