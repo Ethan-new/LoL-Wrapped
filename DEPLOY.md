@@ -125,6 +125,118 @@ docker compose -f docker-compose.prod.yml --env-file .env build web sidekiq
 docker compose -f docker-compose.prod.yml --env-file .env up -d
 ```
 
+## Auto-deploy from main
+
+The CI workflow deploys automatically when you push to `main`, but only if Brakeman, RuboCop, and importmap audit pass.
+
+### Step 1: Create an SSH key for GitHub Actions
+
+On your **local machine** (Mac/Linux), open a terminal and run:
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/deploy_key -N ""
+```
+
+- `-N ""` means no passphrase (required for unattended CI)
+- This creates `~/.ssh/deploy_key` (private) and `~/.ssh/deploy_key.pub` (public)
+
+### Step 2: Add the public key to your droplet
+
+**2a. Copy the public key** (run on your local machine):
+
+```bash
+cat ~/.ssh/deploy_key.pub
+```
+
+Copy the entire line that starts with `ssh-ed25519` and ends with `github-actions-deploy`.
+
+**2b. SSH into your droplet** (as root or your deploy user):
+
+```bash
+ssh deploy@YOUR_DROPLET_IP
+```
+
+**2c. Add the key to authorized_keys:**
+
+```bash
+mkdir -p ~/.ssh
+echo "PASTE_THE_ENTIRE_PUBLIC_KEY_LINE_HERE" >> ~/.ssh/authorized_keys
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/authorized_keys
+```
+
+Replace `PASTE_THE_ENTIRE_PUBLIC_KEY_LINE_HERE` with the output from step 2a (keep the quotes).
+
+**2d. Verify SSH works** (from your local machine):
+
+```bash
+ssh -i ~/.ssh/deploy_key deploy@YOUR_DROPLET_IP "echo 'SSH works'"
+```
+
+You should see `SSH works` with no password prompt.
+
+### Step 3: Add GitHub repository secrets
+
+**3a. Go to your repo on GitHub** → **Settings** → **Secrets and variables** → **Actions**
+
+**3b. Click "New repository secret"** and add these three secrets:
+
+| Name | How to get the value |
+|------|------------------------|
+| `DEPLOY_HOST` | Your droplet’s IPv4 address (e.g. `104.131.56.128`). Find it in the DigitalOcean dashboard. |
+| `DEPLOY_USER` | The SSH user you use to log in. If you created a `deploy` user, use `deploy`. |
+| `DEPLOY_SSH_KEY` | Run `cat ~/.ssh/deploy_key` on your local machine. Copy the **entire** output, including the `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----` lines. Paste as the secret value. |
+
+⚠️ **Important:** The private key must be complete. Do not add or remove any line breaks.
+
+### Step 4: Ensure the repo exists on the server
+
+SSH into the droplet and run:
+
+```bash
+cd ~
+ls -la LoL-Wrapped
+```
+
+- If the directory does not exist, clone the repo:
+
+  ```bash
+  git clone https://github.com/YOUR_USERNAME/LoL-Wrapped.git
+  cd LoL-Wrapped
+  ```
+
+- If you cloned as root, fix ownership so the `deploy` user can pull:
+
+  ```bash
+  sudo chown -R deploy:deploy /home/deploy/LoL-Wrapped
+  ```
+
+- For a **private repo**, add the deploy public key as a deploy key: Repo → Settings → Deploy keys → Add deploy key. Paste `~/.ssh/deploy_key.pub` and enable "Allow write access" if you use SSH clone URLs.
+
+### Step 5: Verify auto-deploy
+
+1. Make a small change (e.g. add a comment to the README)
+2. Push to `main`: `git push origin main`
+3. Go to GitHub → **Actions** tab
+4. You should see a workflow run. The deploy job runs after CI passes.
+5. Check the deploy step logs for errors. A successful deploy ends with the `up -d` command completing.
+
+### Deploy troubleshooting
+
+**"Permission denied (publickey)"**  
+- Confirm the public key was added correctly to `~/.ssh/authorized_keys` on the server  
+- Confirm `DEPLOY_SSH_KEY` contains the full private key including header/footer lines  
+- Confirm `DEPLOY_USER` matches the user that owns `~/LoL-Wrapped`
+
+**"fatal: not a git repository"**  
+- The server directory must be a git clone. Run `git clone ...` in the deploy user’s home if needed.
+
+**Build fails during deploy**  
+- SSH in and run the deploy commands manually to see the full error  
+- Typical causes: missing `.env` on the server, or out-of-memory during `docker build`
+
+---
+
 ## Troubleshooting
 
 **Out of memory**
