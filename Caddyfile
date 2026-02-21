@@ -1,0 +1,12 @@
+# Replace YOUR_DOMAIN with your domain (e.g. lol-wrapped.example.com)
+# For HTTPS, point your domain's DNS A record to this server's IP.
+#
+# If you don't have a domain yet, use:
+#   :80 {
+#     reverse_proxy web:3000
+#   }
+# Then access via http://YOUR_SERVER_IP
+
+YOUR_DOMAIN {
+    reverse_proxy web:3000
+}

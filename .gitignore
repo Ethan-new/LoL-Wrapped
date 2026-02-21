@@ -17,6 +17,7 @@
 # Ignore all environment files (except templates and example).
 /.env*
 !/.env.example
+!/.env.production.example
 !/.env*.erb
 
 # Ignore all logfiles and tempfiles.
