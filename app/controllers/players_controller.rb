@@ -52,12 +52,12 @@ class PlayersController < ApplicationController
   end
 
   def show
-    game_name, tag_line = params[:riot_id_slug].to_s.rpartition("-").then { |name, _, tag| [name, tag] }
+    game_name, tag_line = params[:riot_id_slug].to_s.rpartition("-").then { |name, _, tag| [ name, tag ] }
     riot_id = "#{game_name}##{tag_line}"
     riot_region = RegionMapping.riot_region(params[:region])
     @player = Player.find_by!(riot_id: riot_id, region: riot_region)
   rescue ActiveRecord::RecordNotFound
-    return respond_to_error("Player not found", [], :not_found)
+    respond_to_error("Player not found", [], :not_found)
   end
 
   def update
@@ -173,7 +173,7 @@ class PlayersController < ApplicationController
   end
 
   def load_player_from_params
-    game_name, tag_line = params[:riot_id_slug].to_s.rpartition("-").then { |name, _, tag| [name, tag] }
+    game_name, tag_line = params[:riot_id_slug].to_s.rpartition("-").then { |name, _, tag| [ name, tag ] }
     riot_id = "#{game_name}##{tag_line}"
     riot_region = RegionMapping.riot_region(params[:region])
     Player.find_by(riot_id: riot_id, region: riot_region)

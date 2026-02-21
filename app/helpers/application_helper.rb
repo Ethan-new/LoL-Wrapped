@@ -17,7 +17,7 @@ module ApplicationHelper
   def request_host_options
     return {} unless respond_to?(:request) && request
     opts = { host: request.host }
-    opts[:port] = request.port unless [80, 443].include?(request.port)
+    opts[:port] = request.port unless [ 80, 443 ].include?(request.port)
     opts
   end
 end

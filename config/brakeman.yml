@@ -1,0 +1,3 @@
+# Skip EOLRuby check: Ruby 3.2 EOL (2026-03-31) - upgrade when convenient
+skip_checks:
+  - CheckEOLRuby

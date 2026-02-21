@@ -6,7 +6,7 @@
 #   bundle exec rake debug_match:inspect_match[match_uid]
 namespace :debug_match do
   desc "Inspect match structure for a stored match (match_uid)"
-  task :inspect_match, [:match_uid] => :environment do |_t, args|
+  task :inspect_match, [ :match_uid ] => :environment do |_t, args|
     match_uid = args[:match_uid] || ENV["MATCH_UID"]
     unless match_uid.present?
       puts "Usage: MATCH_UID=NA1_123 rake debug_match:inspect_match"
@@ -41,7 +41,7 @@ namespace :debug_match do
   end
 
   desc "Inspect player recap pipeline (player_id, year)"
-  task :inspect, [:player_id, :year] => :environment do |_t, args|
+  task :inspect, [ :player_id, :year ] => :environment do |_t, args|
     player_id = (args[:player_id] || ENV["PLAYER_ID"]).to_i
     year = (args[:year] || ENV["YEAR"] || Time.current.year).to_i
 

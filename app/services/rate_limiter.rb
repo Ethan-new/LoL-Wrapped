@@ -39,7 +39,7 @@ class RateLimiter
 
       # Sleep until next second boundary
       sleep_until = now + 1
-      sleep([sleep_until - Time.now.to_f, 0.1].max)
+      sleep([ sleep_until - Time.now.to_f, 0.1 ].max)
     end
   end
 
@@ -63,7 +63,7 @@ class RateLimiter
       break unless oldest_ms
 
       sleep_seconds = ((oldest_ms + SUSTAINED_WINDOW_MS - now_ms) / 1000.0).round(3)
-      sleep_seconds = [[sleep_seconds, 0.1].max, 10.0].min
+      sleep_seconds = [ [ sleep_seconds, 0.1 ].max, 10.0 ].min
       sleep(sleep_seconds)
     end
   end

@@ -144,7 +144,7 @@ class ComputeMostPlayedWithJob < ApplicationJob
 
     # Sort by games desc, wins_together desc; take top 20 only
     top_20 = aggregates
-      .sort_by { |_puuid, c| [-c[:games], -c[:wins_together]] }
+      .sort_by { |_puuid, c| [ -c[:games], -c[:wins_together] ] }
       .first(20)
 
     resolver = PlayerResolver.new
@@ -183,7 +183,7 @@ class ComputeMostPlayedWithJob < ApplicationJob
       .map { |champion_id, count| { champion_id: champion_id, count: count } }
 
     RecapYearStat.upsert_all(
-      [{
+      [ {
         player_id: player_id,
         year: year,
         total_pings: total_pings,
@@ -199,7 +199,7 @@ class ComputeMostPlayedWithJob < ApplicationJob
         total_assists: total_assists,
         created_at: now,
         updated_at: now
-      }],
+      } ],
       unique_by: %i[player_id year],
       update_only: %i[total_pings ping_breakdown total_game_seconds total_gold_spent fav_items extra_stats our_team_bans enemy_team_bans total_kills total_deaths total_assists]
     )

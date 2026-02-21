@@ -27,7 +27,7 @@ class RiotClient
   end
 
   def fetch_summoner_by_puuid(puuid:, region:)
-    platforms = REGION_PLATFORMS[region.to_s.downcase] || [region]
+    platforms = REGION_PLATFORMS[region.to_s.downcase] || [ region ]
     last_error = nil
 
     platforms.each do |platform|
@@ -51,7 +51,7 @@ class RiotClient
   end
 
   def fetch_league_entries_by_puuid(puuid:, region:, platform: nil)
-    platforms = platform ? [platform] : (REGION_PLATFORMS[region.to_s.downcase] || [region])
+    platforms = platform ? [ platform ] : (REGION_PLATFORMS[region.to_s.downcase] || [ region ])
 
     platforms.each do |plat|
       base_url = BASE_URL_TEMPLATE % { region: plat }
@@ -214,6 +214,6 @@ class RiotClient
   def backoff_with_jitter(retries)
     base = 2**retries
     jitter = rand(0.0..1.0)
-    [[base + jitter, 10.0].min, 0.1].max
+    [ [ base + jitter, 10.0 ].min, 0.1 ].max
   end
 end

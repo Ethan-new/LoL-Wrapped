@@ -12,7 +12,7 @@ class PlayersIngestTest < ActionDispatch::IntegrationTest
   end
 
   test "POST /players/:id/ingest_year validates year and returns 202 when valid" do
-    assert_enqueued_with(job: IngestYearJob, args: [@player.id, 2025]) do
+    assert_enqueued_with(job: IngestYearJob, args: [ @player.id, 2025 ]) do
       post "/players/#{@player.id}/ingest_year", params: { year: 2025 }, as: :json
     end
 

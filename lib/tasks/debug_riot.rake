@@ -4,7 +4,7 @@
 #   bundle exec rake debug_riot[GameName,1234,na]
 namespace :debug_riot do
   desc "Test Riot API rank fetch for a player (game_name,tag_line,region)"
-  task :ranks, [:game_name, :tag_line, :region] => :environment do |_t, args|
+  task :ranks, [ :game_name, :tag_line, :region ] => :environment do |_t, args|
     game_name = args[:game_name] || ENV["GAME_NAME"]
     tag_line = args[:tag_line] || ENV["TAG_LINE"]
     region_slug = (args[:region] || ENV["REGION"] || "na").to_s.downcase
