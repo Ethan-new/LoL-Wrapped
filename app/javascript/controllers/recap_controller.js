@@ -12,6 +12,20 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;")
 }
 
+// Escapes a value for safe display (handles numbers and strings).
+function safeDisplay(val) {
+  if (val == null) return "0"
+  const n = Number(val)
+  return Number.isNaN(n) ? escapeHtml(String(val)) : String(Math.floor(n))
+}
+
+// Sanitizes a string for use in a URL path segment (prevents javascript: and path traversal).
+function safeUrlSegment(str) {
+  if (str == null || str === "") return "0"
+  const s = String(str).replace(/[^a-zA-Z0-9_-]/g, "")
+  return s.length > 0 ? s : "0"
+}
+
 // Connects to data-controller="recap"
 // Triggers year recap ingestion and can show recap results
 export default class extends Controller {
@@ -325,19 +339,23 @@ export default class extends Controller {
 
     let html = ""
     if (totalKills > 0 || totalDeaths > 0 || totalAssists > 0) {
-      const kdaRatio = totalDeaths > 0 ? ((totalKills + totalAssists) / totalDeaths).toFixed(1) : "∞"
+      const k = Math.max(0, Number(totalKills) || 0)
+      const d = Math.max(0, Number(totalDeaths) || 0)
+      const a = Math.max(0, Number(totalAssists) || 0)
+      const kdaRatio = d > 0 ? ((k + a) / d).toFixed(1) : "∞"
       html += `<p class="mb-2 text-sm font-medium text-stone-400">K/D/A (all games)</p>
         <div class="rounded-lg bg-stone-900/70 px-3 py-2 mb-4 flex items-center justify-between gap-4">
-          <span class="text-green-500 font-semibold">${totalKills.toLocaleString()} K</span>
-          <span class="text-red-500 font-semibold">${totalDeaths.toLocaleString()} D</span>
-          <span class="text-amber-400 font-semibold">${totalAssists.toLocaleString()} A</span>
-          <span class="text-stone-400 text-sm">KDA ${kdaRatio}</span>
+          <span class="text-green-500 font-semibold">${k.toLocaleString()} K</span>
+          <span class="text-red-500 font-semibold">${d.toLocaleString()} D</span>
+          <span class="text-amber-400 font-semibold">${a.toLocaleString()} A</span>
+          <span class="text-stone-400 text-sm">KDA ${escapeHtml(kdaRatio)}</span>
         </div>`
     }
     if (totalGoldSpent > 0) {
+      const gold = Math.max(0, Number(totalGoldSpent) || 0)
       html += `<p class="mb-2 text-sm font-medium text-stone-400">Total gold spent</p>
         <div class="rounded-lg bg-stone-900/70 px-3 py-2 mb-4">
-          <span class="text-amber-400 font-bold text-lg">${totalGoldSpent.toLocaleString()}</span>
+          <span class="text-amber-400 font-bold text-lg">${gold.toLocaleString()}</span>
           <span class="text-stone-500 text-sm"> gold</span>
         </div>`
     }
@@ -345,7 +363,7 @@ export default class extends Controller {
       html += `<p class="mb-2 text-sm font-medium text-stone-400">Top 3 items built</p>
         <div class="flex flex-wrap gap-3 mb-4">` +
         favItems.filter((item) => item && ((item.item_id ?? item.itemId) != null)).map((item) => {
-          const id = escapeHtml(String(item.item_id ?? item.itemId))
+          const id = safeUrlSegment(item.item_id ?? item.itemId)
           const name = escapeHtml(item.name || `Item ${item.item_id ?? item.itemId}`)
           const count = item.count ?? 0
           return `
@@ -353,7 +371,7 @@ export default class extends Controller {
             <img src="${ITEM_IMG_BASE}/${id}.png" alt="${name}" class="h-8 w-8 rounded" onerror="this.style.display='none'">
             <div>
               <span class="text-stone-300 text-sm block">${name}</span>
-              <span class="text-amber-400 font-semibold text-xs">${count} games</span>
+              <span class="text-amber-400 font-semibold text-xs">${safeDisplay(count)} games</span>
             </div>
           </div>`
         }).join("") +
@@ -373,7 +391,7 @@ export default class extends Controller {
             <div class="flex items-center gap-2">
               <img src="${CHAMP_IMG_BASE}/${imgKey}.png" alt="${name}" class="h-6 w-6 rounded-full" onerror="this.style.display='none'">
               <span class="text-stone-300 text-sm">${name}</span>
-              <span class="text-amber-400 font-semibold text-xs ml-auto">${b.count}×</span>
+              <span class="text-amber-400 font-semibold text-xs ml-auto">${safeDisplay(b.count)}×</span>
             </div>`
           }).join("") + `</div></div>`
       }
@@ -383,12 +401,12 @@ export default class extends Controller {
           <div class="space-y-1">` +
           enemyTeamBans.map((b) => {
             const name = escapeHtml(b.name || `Champ ${b.champion_id}`)
-            const imgKey = escapeHtml(String(b.key || b.champion_id))
+            const imgKey = safeUrlSegment(b.key || b.champion_id)
             return `
             <div class="flex items-center gap-2">
               <img src="${CHAMP_IMG_BASE}/${imgKey}.png" alt="${name}" class="h-6 w-6 rounded-full" onerror="this.style.display='none'">
               <span class="text-stone-300 text-sm">${name}</span>
-              <span class="text-red-400 font-semibold text-xs ml-auto">${b.count}×</span>
+              <span class="text-red-400 font-semibold text-xs ml-auto">${safeDisplay(b.count)}×</span>
             </div>`
           }).join("") + `</div></div>`
       }
@@ -410,23 +428,29 @@ export default class extends Controller {
         `</div>`
     }
     if (totalGameSeconds > 0) {
+      const secs = Math.max(0, Number(totalGameSeconds) || 0)
       html += `<p class="mb-2 text-sm font-medium text-stone-400">Total time in game</p>
         <div class="rounded-lg bg-stone-900/70 px-3 py-2 mb-4">
-          <span class="text-amber-400 font-bold text-lg">${this.formatGameTime(totalGameSeconds)}</span>
+          <span class="text-amber-400 font-bold text-lg">${escapeHtml(this.formatGameTime(secs))}</span>
         </div>`
     }
     if (totalPings > 0) {
+      const safeTotalPings = Math.max(0, Number(totalPings) || 0)
       const entries = Object.entries(pingBreakdown)
-        .filter(([, count]) => count > 0)
-        .sort((a, b) => b[1] - a[1])
-      html += `<p class="mb-2 text-sm font-medium text-stone-400">Pings you used (${totalPings.toLocaleString()} total)</p>
+        .filter(([, count]) => Number(count) > 0)
+        .sort((a, b) => Number(b[1]) - Number(a[1]))
+      html += `<p class="mb-2 text-sm font-medium text-stone-400">Pings you used (${safeTotalPings.toLocaleString()} total)</p>
         <div class="space-y-1 mb-4">`
       if (entries.length > 0) {
-        html += entries.map(([key, count]) => `
+        html += entries.map(([key, count]) => {
+          const n = Number(count)
+          const displayCount = !Number.isNaN(n) && n >= 0 ? n.toLocaleString() : "0"
+          return `
           <div class="flex items-center justify-between rounded-lg bg-stone-900/70 px-3 py-2">
             <span class="text-stone-300">${escapeHtml(this.pingLabel(key))}</span>
-            <span class="text-amber-400 font-semibold">${count.toLocaleString()}</span>
-          </div>`).join("")
+            <span class="text-amber-400 font-semibold">${displayCount}</span>
+          </div>`
+        }).join("")
       } else {
         html += `<div class="rounded-lg bg-stone-900/70 px-3 py-2 text-stone-500 text-sm">No breakdown available</div>`
       }
@@ -439,8 +463,8 @@ export default class extends Controller {
         <div class="flex items-center justify-between rounded-lg bg-stone-900/70 px-3 py-2">
           <span class="font-medium text-stone-300">#${i + 1} ${name}</span>
           <div class="flex-1 mx-3 text-right">
-            <span class="text-amber-400 font-semibold">${r.games} games</span>
-            <span class="text-stone-500 text-sm"> • ${r.wins_together} wins together</span>
+            <span class="text-amber-400 font-semibold">${safeDisplay(r.games)} games</span>
+            <span class="text-stone-500 text-sm"> • ${safeDisplay(r.wins_together)} wins together</span>
           </div>
         </div>
       `
@@ -452,7 +476,7 @@ export default class extends Controller {
         return `
         <div class="flex items-center justify-between rounded-lg bg-red-900/20 px-3 py-2">
           <span class="font-medium text-stone-300">#${i + 1} ${name}</span>
-          <span class="text-red-400 font-semibold">${r.times_beat_us}× beat you</span>
+          <span class="text-red-400 font-semibold">${safeDisplay(r.times_beat_us)}× beat you</span>
         </div>
       `
       }).join("")
