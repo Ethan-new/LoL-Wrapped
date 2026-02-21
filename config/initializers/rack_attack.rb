@@ -5,7 +5,7 @@
 # See https://github.com/rack/rack-attack
 
 Rack::Attack.throttled_responder = lambda do |request|
-  [429, { "Content-Type" => "application/json" }, ['{"error":"Too many requests. Please try again later."}']]
+  [ 429, { "Content-Type" => "application/json" }, [ '{"error":"Too many requests. Please try again later."}' ] ]
 end
 
 Rack::Attack.throttle("players/lookup", limit: 10, period: 1.minute) do |req|
