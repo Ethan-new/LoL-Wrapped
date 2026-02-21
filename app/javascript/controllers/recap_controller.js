@@ -1,5 +1,17 @@
 import { Controller } from "@hotwired/stimulus"
 
+// Escapes a string for safe insertion into HTML (prevents XSS).
+function escapeHtml(str) {
+  if (str == null || str === "") return ""
+  const s = String(str)
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 // Connects to data-controller="recap"
 // Triggers year recap ingestion and can show recap results
 export default class extends Controller {
@@ -333,8 +345,8 @@ export default class extends Controller {
       html += `<p class="mb-2 text-sm font-medium text-stone-400">Top 3 items built</p>
         <div class="flex flex-wrap gap-3 mb-4">` +
         favItems.filter((item) => item && ((item.item_id ?? item.itemId) != null)).map((item) => {
-          const id = item.item_id ?? item.itemId
-          const name = (item.name || `Item ${id}`).replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          const id = escapeHtml(String(item.item_id ?? item.itemId))
+          const name = escapeHtml(item.name || `Item ${item.item_id ?? item.itemId}`)
           const count = item.count ?? 0
           return `
           <div class="flex items-center gap-2 rounded-lg bg-stone-900/70 px-3 py-2">
@@ -355,8 +367,8 @@ export default class extends Controller {
           <p class="mb-2 text-xs font-medium text-stone-500">Your team banned</p>
           <div class="space-y-1">` +
           ourTeamBans.map((b) => {
-            const name = (b.name || `Champ ${b.champion_id}`).replace(/</g, "&lt;").replace(/>/g, "&gt;")
-            const imgKey = b.key || b.champion_id
+            const name = escapeHtml(b.name || `Champ ${b.champion_id}`)
+            const imgKey = escapeHtml(String(b.key || b.champion_id))
             return `
             <div class="flex items-center gap-2">
               <img src="${CHAMP_IMG_BASE}/${imgKey}.png" alt="${name}" class="h-6 w-6 rounded-full" onerror="this.style.display='none'">
@@ -370,8 +382,8 @@ export default class extends Controller {
           <p class="mb-2 text-xs font-medium text-stone-500">Enemy team banned</p>
           <div class="space-y-1">` +
           enemyTeamBans.map((b) => {
-            const name = (b.name || `Champ ${b.champion_id}`).replace(/</g, "&lt;").replace(/>/g, "&gt;")
-            const imgKey = b.key || b.champion_id
+            const name = escapeHtml(b.name || `Champ ${b.champion_id}`)
+            const imgKey = escapeHtml(String(b.key || b.champion_id))
             return `
             <div class="flex items-center gap-2">
               <img src="${CHAMP_IMG_BASE}/${imgKey}.png" alt="${name}" class="h-6 w-6 rounded-full" onerror="this.style.display='none'">
@@ -387,8 +399,8 @@ export default class extends Controller {
       html += `<p class="mb-2 text-sm font-medium text-stone-400">Combat & objective stats</p>
         <div class="grid gap-2 sm:grid-cols-2 mb-4">` +
         extraEntries.map(([key, val]) => {
-          const label = this.extraStatLabel(key)
-          const value = this.formatExtraStatValue(key, val)
+          const label = escapeHtml(this.extraStatLabel(key))
+          const value = escapeHtml(this.formatExtraStatValue(key, val))
           return `
           <div class="flex items-center justify-between rounded-lg bg-stone-900/70 px-3 py-2">
             <span class="text-stone-300 text-sm">${label}</span>
@@ -412,7 +424,7 @@ export default class extends Controller {
       if (entries.length > 0) {
         html += entries.map(([key, count]) => `
           <div class="flex items-center justify-between rounded-lg bg-stone-900/70 px-3 py-2">
-            <span class="text-stone-300">${this.pingLabel(key)}</span>
+            <span class="text-stone-300">${escapeHtml(this.pingLabel(key))}</span>
             <span class="text-amber-400 font-semibold">${count.toLocaleString()}</span>
           </div>`).join("")
       } else {
@@ -422,7 +434,7 @@ export default class extends Controller {
     }
     if (list.length > 0) {
       html += `<p class="mb-2 text-sm font-medium text-stone-400">Most played with (${list.length})</p>` + list.map((r, i) => {
-        const name = r.teammate_name || r.teammate_riot_id || "Unknown"
+        const name = escapeHtml(r.teammate_name || r.teammate_riot_id || "Unknown")
         return `
         <div class="flex items-center justify-between rounded-lg bg-stone-900/70 px-3 py-2">
           <span class="font-medium text-stone-300">#${i + 1} ${name}</span>
@@ -436,7 +448,7 @@ export default class extends Controller {
     }
     if (enemies.length > 0) {
       html += `<p class="mb-2 mt-4 text-sm font-medium text-stone-400">Enemies who beat you (${enemies.length})</p>` + enemies.map((r, i) => {
-        const name = r.enemy_name || r.enemy_riot_id || "Unknown"
+        const name = escapeHtml(r.enemy_name || r.enemy_riot_id || "Unknown")
         return `
         <div class="flex items-center justify-between rounded-lg bg-red-900/20 px-3 py-2">
           <span class="font-medium text-stone-300">#${i + 1} ${name}</span>
