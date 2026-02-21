@@ -6,6 +6,23 @@ on:
     branches: [ main ]
 
 jobs:
+  dco:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify DCO sign-off
+        run: |
+          for commit in $(git rev-list --no-merges ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}); do
+            if ! git log -1 --format='%B' "$commit" | grep -q "Signed-off-by:"; then
+              echo "::error::Commit $commit is not signed off. Use 'git commit -s'."
+              exit 1
+            fi
+          done
+          echo "All commits are signed off."
+
   scan_ruby:
     runs-on: ubuntu-latest
 
