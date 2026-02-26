@@ -1,7 +1,7 @@
 import { Controller } from "@hotwired/stimulus"
 
 // Connects to data-controller="update-player"
-// Refreshes player data from Riot API with 10-second cooldown
+// Refreshes player data from Riot API with 5-minute cooldown
 export default class extends Controller {
   static values = {
     url: String,
@@ -9,7 +9,7 @@ export default class extends Controller {
   }
 
   static targets = ["button"]
-  static COOLDOWN_SECONDS = 5
+  static COOLDOWN_SECONDS = 300  // 5 minutes
 
   connect() {
     this.checkCooldown()
@@ -43,12 +43,12 @@ export default class extends Controller {
         this.updateButtonState()
       } else {
         const data = await response.json().catch(() => ({}))
-        alert(data.error || "Failed to update profile")
+        alert(data.error || "Failed to refresh profile")
         this.updating = false
         this.setLoading(false)
       }
     } catch (err) {
-      alert("Failed to update profile")
+      alert("Failed to refresh profile")
       this.updating = false
       this.setLoading(false)
     }
@@ -89,12 +89,12 @@ export default class extends Controller {
       btn.disabled = true
       btn.setAttribute("aria-disabled", "true")
       btn.title = `Available in ${remaining} seconds`
-      btn.textContent = `Update in ${remaining}s`
+      btn.textContent = `Refresh in ${remaining}s`
     } else {
       btn.disabled = false
       btn.removeAttribute("aria-disabled")
       btn.title = ""
-      btn.textContent = "Update profile"
+      btn.textContent = "Refresh profile"
     }
   }
 
@@ -105,8 +105,8 @@ export default class extends Controller {
     if (loading) {
       btn.disabled = true
       btn.setAttribute("aria-disabled", "true")
-      btn.title = "Updating..."
-      btn.textContent = "Updating…"
+      btn.title = "Refreshing..."
+      btn.textContent = "Refreshing…"
     } else {
       this.updateButtonState()
     }

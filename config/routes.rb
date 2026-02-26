@@ -26,7 +26,10 @@ Rails.application.routes.draw do
 
   post "players/:id/ingest_year", to: "players#ingest_year", as: :ingest_year_player, constraints: { id: /\d+/ }
   post "players/:id/compute_recap", to: "players#compute_recap", as: :compute_recap_player, constraints: { id: /\d+/ }
+  get "players/:id/recap_statuses", to: "players#recap_statuses", as: :recap_statuses_player, constraints: { id: /\d+/ }
   get "players/:id/recap/:year", to: "recaps#show", as: :player_recap, constraints: { id: /\d+/, year: /\d{4}/ }
+  get "players/:region/:riot_id_slug/:year/recap", to: "recaps#page", as: :player_year_recap,
+      constraints: { region: /na|eu|asia|sea/, riot_id_slug: /[^\/]+/, year: /\d{4}/ }
 
   get "players/:region/:riot_id_slug", to: "players#show", as: :player,
       constraints: { region: /na|eu|asia|sea/, riot_id_slug: /[^\/]+/ }

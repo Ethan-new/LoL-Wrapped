@@ -158,7 +158,7 @@ class RiotClient
   def validate_region!(region)
     return if VALID_REGIONS.include?(region.to_s.downcase)
 
-    raise ::ArgumentError, "Invalid region: #{region}. Must be one of: #{VALID_REGIONS.join(', ')}"
+    raise ArgumentError, "Invalid region: #{region}. Must be one of: #{VALID_REGIONS.join(', ')}"
   end
 
   def http_get(url)

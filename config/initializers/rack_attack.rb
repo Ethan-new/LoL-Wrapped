@@ -20,6 +20,11 @@ Rack::Attack.throttle("players/compute", limit: 10, period: 1.minute) do |req|
   req.ip if req.path.match?(%r{\A/players/\d+/compute_recap\z}) && req.post?
 end
 
+# Refresh profile: max 10 refreshes per 5 minutes per IP (covers bypassing client cooldown)
+Rack::Attack.throttle("players/update", limit: 10, period: 5.minutes) do |req|
+  req.ip if req.patch? && req.path.match?(%r{\A/players/(?:na|eu|asia|sea)/[^/]+\z})
+end
+
 Rack::Attack.throttle("req/ip", limit: 60, period: 1.minute) do |req|
   req.ip if req.post? || req.patch? || req.put? || req.delete?
 end

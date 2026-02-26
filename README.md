@@ -46,10 +46,13 @@ bin/dev
 # Terminal 1 - Rails server
 bin/rails server
 
-# Terminal 2 - Sidekiq
-bundle exec sidekiq
+# Terminal 2 - Sidekiq ingest (downloads matches from Riot, concurrency 1)
+bundle exec sidekiq -C config/sidekiq_ingest.yml
 
-# Terminal 3 (optional) - Tailwind CSS watcher
+# Terminal 3 - Sidekiq compute (runs recap computation, never takes ingest jobs)
+bundle exec sidekiq -C config/sidekiq_compute.yml
+
+# Terminal 4 (optional) - Tailwind CSS watcher
 bin/rails tailwindcss:watch
 ```
 

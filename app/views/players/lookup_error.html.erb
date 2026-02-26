@@ -1,34 +1,12 @@
 <% content_for :title, "LoL Wrapped - Player Lookup" %>
 
-<div class="w-full max-w-2xl">
-  <header class="mb-12 text-center">
-    <h1 class="text-4xl font-bold tracking-tight text-amber-400">LoL Wrapped</h1>
-    <p class="mt-2 text-lg text-stone-400">Look up your Riot account to get started</p>
+<div class="flex w-full max-w-2xl flex-col items-center">
+  <header class="text-center">
+    <h1 class="text-4xl font-bold tracking-tight text-white">LoL Wrapped</h1>
+    <p class="mt-2 text-lg text-zinc-400">Search your game name to get your <%= Time.current.year - 1 %> wrapped</p>
   </header>
 
-  <%= turbo_frame_tag "lookup_result" do %>
-    <div class="space-y-6 rounded-xl bg-stone-800/50 p-8 shadow-xl">
-    <div class="flex items-center gap-3">
-      <div class="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/20">
-        <svg class="h-6 w-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-        </svg>
-      </div>
-      <div>
-        <h2 class="text-xl font-semibold text-stone-100">Lookup Failed</h2>
-        <p class="text-sm text-red-400"><%= error %></p>
-      </div>
-    </div>
-
-    <% if details.any? %>
-      <ul class="space-y-1 rounded-lg bg-stone-900/50 p-4">
-        <% details.each do |detail| %>
-          <li class="text-sm text-stone-300">• <%= detail %></li>
-        <% end %>
-      </ul>
-    <% end %>
-
-    <%= render "form" %>
-    </div>
-  <% end %>
+  <div class="w-full">
+    <%= render "lookup_result", error: error, details: details, show_region_hint: show_region_hint %>
+  </div>
 </div>

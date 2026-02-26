@@ -1,0 +1,4 @@
+:concurrency: 1  # Compute recap from downloaded matches (no Riot API)
+:queues:
+  - lol_wrapped_production_compute  # production
+  - compute                        # development

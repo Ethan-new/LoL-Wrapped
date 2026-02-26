@@ -50,9 +50,25 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  sidekiq:
+  sidekiq_ingest:
     build: .
-    command: bundle exec sidekiq
+    command: bundle exec sidekiq -C config/sidekiq_ingest.yml
+    environment:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${RAILS_MASTER_KEY}
+      DATABASE_URL: postgres://app:${APP_DATABASE_PASSWORD}@postgres:5432/app_production
+      REDIS_URL: redis://redis:6379/0
+      RIOT_API_KEY: ${RIOT_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  sidekiq_compute:
+    build: .
+    command: bundle exec sidekiq -C config/sidekiq_compute.yml
     environment:
       RAILS_ENV: production
       RAILS_MASTER_KEY: ${RAILS_MASTER_KEY}

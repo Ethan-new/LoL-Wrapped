@@ -1,4 +1,7 @@
-:concurrency: 5
+# Use sidekiq_ingest.yml + sidekiq_compute.yml (run both processes) - ingest and compute run in parallel.
+# Ingest process: default queue only, concurrency 1 (Riot rate limits).
+# Compute process: compute queue only - never takes ingest jobs.
+:concurrency: 1
 :queues:
-  - lol_wrapped_production_default  # production (queue_name_prefix)
-  - default                        # development
+  - default
+  - compute

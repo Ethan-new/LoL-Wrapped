@@ -1,0 +1,18 @@
+<% content_for :title, "#{@player.riot_id} - #{@year} LoL Wrapped" %>
+
+<div class="fixed inset-0 flex flex-col bg-stone-950" data-controller="recap" data-recap-recap-url-value="<%= player_recap_url(@player, @year) %>" data-recap-autoload-value="true" data-recap-back-url-value="<%= @player_path %>" data-recap-player-riot-id-value="<%= @player.riot_id %>" data-recap-profile-icon-url-value="<%= @player.profile_icon_url %>">
+  <div data-recap-target="wrappedModal" class="relative z-10 flex flex-1 flex-col min-h-0">
+    <div class="flex shrink-0 items-center justify-between px-4 py-3 border-b border-stone-700">
+      <%= link_to "← Back to profile", @player_path, class: "text-sm font-medium text-white transition-colors hover:text-stone-300 focus:outline-none focus:ring-2 focus:ring-stone-400 rounded px-1 -mx-1" %>
+      <span class="text-sm font-medium text-white">LoL Wrapped</span>
+      <div class="w-24"></div>
+    </div>
+    <p data-recap-target="message" class="px-4 py-4 text-sm text-stone-400">Loading recap…</p>
+    <div data-controller="wrapped-cards" class="flex flex-1 flex-col min-h-0">
+      <div data-wrapped-cards-target="scrollContainer" data-recap-target="cardsContainer" class="flex flex-1 flex-nowrap overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth" role="region" aria-label="Wrapped cards">
+        <!-- Cards injected by recap controller -->
+      </div>
+      <div data-wrapped-cards-target="dots" data-action="click->wrapped-cards#dotsClick" class="flex shrink-0 justify-center gap-2 py-3"></div>
+    </div>
+  </div>
+</div>

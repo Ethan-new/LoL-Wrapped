@@ -122,7 +122,7 @@ docker compose -f docker-compose.prod.yml logs -f web
 ```bash
 cd ~/LoL-Wrapped
 git pull
-docker compose -f docker-compose.prod.yml --env-file .env build web sidekiq
+docker compose -f docker-compose.prod.yml --env-file .env build web sidekiq_ingest sidekiq_compute
 docker compose -f docker-compose.prod.yml --env-file .env up -d
 ```
 
@@ -255,6 +255,6 @@ ls -la LoL-Wrapped
 
 ```bash
 docker compose -f docker-compose.prod.yml logs web
-docker compose -f docker-compose.prod.yml logs sidekiq
+docker compose -f docker-compose.prod.yml logs sidekiq_ingest sidekiq_compute
 docker compose -f docker-compose.prod.yml logs postgres
 ```

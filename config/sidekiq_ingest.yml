@@ -1,0 +1,4 @@
+:concurrency: 1  # Riot API rate limits - only one ingest at a time
+:queues:
+  - lol_wrapped_production_default  # production
+  - default                         # development

@@ -76,7 +76,7 @@ namespace :debug_match do
       end
     end
 
-    recap_count = RecapPerson.where(player_id: player_id, year: year).count
-    puts "  RecapPerson count: #{recap_count}"
+    stat = RecapYearStat.find_by(player_id: player_id, year: year)
+    puts "  RecapYearStat: most_played_with=#{stat&.most_played_with&.size || 0}, most_beat_us=#{stat&.most_beat_us&.size || 0}"
   end
 end

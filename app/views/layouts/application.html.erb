@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html class="bg-stone-950">
+<html class="bg-black">
   <head>
     <title><%= content_for(:title) || "App" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -18,8 +18,8 @@
     <%= javascript_importmap_tags %>
   </head>
 
-  <body class="min-h-screen bg-stone-950 text-stone-100">
-    <main class="container mx-auto flex min-h-screen flex-col items-center justify-center px-5 py-12">
+  <body class="min-h-screen bg-black text-white">
+    <main class="flex min-h-screen w-full items-center justify-center px-5 py-12">
       <%= yield %>
     </main>
   </body>

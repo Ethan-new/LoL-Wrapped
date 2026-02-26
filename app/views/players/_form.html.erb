@@ -1,21 +1,9 @@
-<%= form_with url: players_lookup_path, method: :post, data: { turbo_frame: "_top", controller: "lookup-form", action: "turbo:submit-start->lookup-form#submit" }, class: "space-y-6 rounded-xl bg-stone-800/50 p-8 shadow-xl" do |f| %>
-  <div class="space-y-4">
-    <div class="grid gap-4 sm:grid-cols-2">
-      <div>
-        <%= label_tag :game_name, "Game Name", class: "mb-2 block text-sm font-medium text-stone-300" %>
-        <%= text_field_tag :game_name, params[:game_name], placeholder: "SummonerName", autocomplete: "off", class: "w-full rounded-lg border border-stone-600 bg-stone-900 px-4 py-3 text-stone-100 placeholder-stone-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none" %>
-      </div>
-      <div>
-        <%= label_tag :tag_line, "Tag Line", class: "mb-2 block text-sm font-medium text-stone-300" %>
-        <%= text_field_tag :tag_line, params[:tag_line], placeholder: "NA1", autocomplete: "off", class: "w-full rounded-lg border border-stone-600 bg-stone-900 px-4 py-3 text-stone-100 placeholder-stone-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none" %>
-      </div>
-    </div>
-
-    <div>
-      <%= label_tag :region, "Region", class: "mb-2 block text-sm font-medium text-stone-300" %>
-      <%= select_tag :region, options_for_select([["NA", "na"], ["EU", "eu"], ["Asia", "asia"], ["Sea", "sea"]], params[:region]), include_blank: "Select region", class: "w-full rounded-lg border border-stone-600 bg-stone-900 px-4 py-3 text-stone-100 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none" %>
-    </div>
+<%= form_with url: players_lookup_path, method: :post, data: { turbo_frame: "_top", controller: "lookup-form", action: "turbo:submit-start->lookup-form#submit" }, class: "rounded-xl p-8" do |f| %>
+  <div class="flex overflow-hidden rounded-lg border border-zinc-700">
+    <%= select_tag :region, options_for_select([["NA", "na"], ["EU", "eu"], ["Asia", "asia"], ["Sea", "sea"]], params[:region].presence || "na"), class: "shrink-0 border-0 border-r border-zinc-700 bg-transparent px-4 py-3 text-white focus:border-zinc-500 focus:ring-0 focus:outline-none [&>option]:bg-zinc-900 [&>option]:text-white" %>
+    <%= text_field_tag :riot_id, params[:riot_id], placeholder: "Game name#tagline", autocomplete: "off", class: "min-w-0 flex-1 border-0 border-r border-zinc-700 bg-transparent px-4 py-3 text-white placeholder-zinc-500 focus:ring-0 focus:outline-none" %>
+    <%= button_tag type: "submit", class: "shrink-0 border-0 border-l border-zinc-700 bg-transparent px-4 py-3 text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50", aria: { label: "Look up player" } do %>
+      <span data-lookup-form-target="arrow">→</span>
+    <% end %>
   </div>
-
-  <%= submit_tag "Look Up", data: { lookup_form_target: "submit" }, class: "w-full cursor-pointer rounded-lg bg-amber-500 px-4 py-3 font-semibold text-stone-900 transition-colors hover:bg-amber-400 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900 focus:outline-none disabled:cursor-not-allowed disabled:opacity-70" %>
 <% end %>

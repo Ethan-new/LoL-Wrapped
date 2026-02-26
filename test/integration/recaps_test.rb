@@ -9,24 +9,32 @@ class RecapsTest < ActionDispatch::IntegrationTest
       riot_id: "RecapPlayer#NA1",
       region: "americas"
     )
+    @previous_year = Time.current.year - 1
   end
 
   test "GET /players/:id/recap/:year returns sorted results" do
-    RecapPerson.create!(player_id: @player.id, year: 2025, teammate_puuid: "teammate-a", games: 42, wins_together: 21)
-    RecapPerson.create!(player_id: @player.id, year: 2025, teammate_puuid: "teammate-b", games: 10, wins_together: 8)
-    RecapPerson.create!(player_id: @player.id, year: 2025, teammate_puuid: "teammate-c", games: 42, wins_together: 25)
+    RecapYearStat.create!(
+      player_id: @player.id,
+      year: @previous_year,
+      most_played_with: [
+        { "teammate_puuid" => "teammate-c", "teammate_riot_id" => nil, "teammate_name" => "…te-c", "games" => 42, "wins_together" => 25 },
+        { "teammate_puuid" => "teammate-a", "teammate_riot_id" => nil, "teammate_name" => "…te-a", "games" => 42, "wins_together" => 21 },
+        { "teammate_puuid" => "teammate-b", "teammate_riot_id" => nil, "teammate_name" => "…te-b", "games" => 10, "wins_together" => 8 }
+      ],
+      most_beat_us: []
+    )
 
-    get "/players/#{@player.id}/recap/2025", as: :json
+    get "/players/#{@player.id}/recap/#{@previous_year}", as: :json
 
     assert_response :ok
     json = response.parsed_body
     assert_equal @player.id, json["player_id"]
-    assert_equal 2025, json["year"]
+    assert_equal @previous_year, json["year"]
 
     most_played = json["most_played_with"]
     assert_equal 3, most_played.size
 
-    # Sorted by games desc, then wins_together desc
+    # Sorted by games desc, then wins_together desc (stored pre-sorted)
     assert_equal "teammate-c", most_played[0]["teammate_puuid"]
     assert_equal 42, most_played[0]["games"]
     assert_equal 25, most_played[0]["wins_together"]
@@ -41,7 +49,7 @@ class RecapsTest < ActionDispatch::IntegrationTest
   end
 
   test "GET /players/:id/recap/:year returns 404 for unknown player" do
-    get "/players/99999/recap/2025", as: :json
+    get "/players/99999/recap/#{@previous_year}", as: :json
 
     assert_response :not_found
   end
@@ -50,5 +58,25 @@ class RecapsTest < ActionDispatch::IntegrationTest
     get "/players/#{@player.id}/recap/2000", as: :json
 
     assert_response :unprocessable_entity
+  end
+
+  test "GET /players/:region/:riot_id_slug/:year/recap renders recap page" do
+    region = RegionMapping.region_slug(@player.region)
+    riot_id_slug = @player.riot_id_slug
+
+    get "/players/#{region}/#{riot_id_slug}/#{@previous_year}/recap"
+
+    assert_response :ok
+    assert_select "div[data-controller='recap'][data-recap-autoload-value='true']"
+    assert_match(/Back to profile/, response.body)
+  end
+
+  test "GET /players/:region/:riot_id_slug/:year/recap redirects for invalid year" do
+    region = RegionMapping.region_slug(@player.region)
+    riot_id_slug = @player.riot_id_slug
+
+    get "/players/#{region}/#{riot_id_slug}/2000/recap"
+
+    assert_redirected_to player_path(region: region, riot_id_slug: riot_id_slug)
   end
 end

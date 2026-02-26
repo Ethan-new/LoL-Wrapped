@@ -1,14 +1,12 @@
 # frozen_string_literal: true
 
 class Player < ApplicationRecord
-  has_many :recap_people, dependent: :destroy
-  has_many :recap_enemies, dependent: :destroy
   has_many :recap_year_stats, dependent: :destroy
 
   # year_match_ids (jsonb): { "2025" => ["NA1_123", ...], "2024" => [...] }
   # recap_statuses (jsonb): { "2025" => "generating"|"ready"|"failed", "2024" => "ready", ... }
   # Data Dragon version for profile icons - update when assets stop loading
-  PROFILE_ICON_BASE_URL = "https://ddragon.leagueoflegends.com/cdn/14.24.1/img/profileicon"
+  PROFILE_ICON_BASE_URL = "https://ddragon.leagueoflegends.com/cdn/16.4.1/img/profileicon"
 
   validates :puuid, presence: true, uniqueness: true
 
