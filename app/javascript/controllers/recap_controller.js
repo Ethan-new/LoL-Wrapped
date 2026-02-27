@@ -54,6 +54,7 @@ export default class extends Controller {
   static values = {
     ingestUrl: String,
     computeUrl: String,
+    recapPageUrl: String,
     recapUrl: String,
     statusUrl: String,
     playerId: Number,
@@ -66,7 +67,7 @@ export default class extends Controller {
     backUrl: String
   }
 
-  static targets = ["generateButton", "viewButton", "computeButton", "message", "progressBlock", "progressSpinner", "progressContent", "wrappedModal", "cardsContainer"]
+  static targets = ["recapAction", "generateButton", "viewButton", "computeButton", "message", "progressBlock", "progressSpinner", "progressContent", "wrappedModal", "cardsContainer"]
 
   async connect() {
     await this.refreshRecapStatus()
@@ -98,8 +99,8 @@ export default class extends Controller {
       const hasBans = (data.our_team_bans?.length ?? 0) > 0 || (data.enemy_team_bans?.length ?? 0) > 0
       const hasKda = (data.total_kills ?? 0) > 0 || (data.total_deaths ?? 0) > 0 || (data.total_assists ?? 0) > 0
       if (response.ok && (data.most_played_with?.length || data.most_beat_us?.length || (data.total_pings ?? 0) > 0 || (data.total_game_seconds ?? 0) > 0 || (data.total_gold_spent ?? 0) > 0 || (data.fav_items?.length ?? 0) > 0 || hasExtraStats || hasBans || hasKda)) {
-        const champNames = await this.fetchChampionNames()
-        this.renderWrappedCards(data, year, champNames)
+        const [champNames, itemNames] = await Promise.all([this.fetchChampionNames(), this.fetchItemNames()])
+        this.renderWrappedCards(data, year, champNames, itemNames)
         if (this.hasWrappedModalTarget) {
           this.wrappedModalTarget.classList.remove("hidden")
           this.wrappedModalTarget.setAttribute("aria-hidden", "false")
@@ -187,7 +188,7 @@ export default class extends Controller {
         if (this.element?.isConnected) {
           this.recapStatusesValue = { ...(this.recapStatusesValue || {}), [year]: "ready" }
           this.updateStatusDisplay()
-          this.showMessage("Recap is ready! Click \"View recap\" to see it.", "success")
+          this.showMessage("Recap is ready! Click \"Watch my recap\" to see it.", "success")
         }
       }
     } catch (_err) {
@@ -203,9 +204,13 @@ export default class extends Controller {
     const isFailed = status === "failed"
 
     const hasRecap = statuses[String(year)] === "ready"
-    this.updateButtonState("generate", isGenerating, "Generating…", hasRecap ? "Regenerate recap" : "Generate recap")
-    this.updateButtonState("view", isGenerating, "Please wait…", "View recap")
-    this.updateButtonState("compute", isGenerating, "Computing…", "Compute")
+    if (this.hasRecapActionTarget) {
+      this.updateRecapAction(isGenerating, hasRecap)
+    } else {
+      this.updateButtonState("generate", isGenerating, "Generating…", hasRecap ? "Regenerate recap" : "Generate recap")
+      this.updateButtonState("view", isGenerating, "Please wait…", "View recap")
+      this.updateButtonState("compute", isGenerating, "Computing…", "Compute")
+    }
 
     if (isGenerating) {
       this.updateProgressBlock()
@@ -230,41 +235,53 @@ export default class extends Controller {
     const progress = this.ingestProgressValue || {}
     const phase = progress.phase || progress["phase"]
     const queuePosition = progress.queue_position ?? progress["queue_position"]
-    const processed = progress.processed ?? progress["processed"]
     const downloaded = progress.downloaded ?? progress["downloaded"]
 
-    const lines = []
+    const target = downloaded != null && downloaded >= 0 && queuePosition === 0 ? parseInt(downloaded, 10) : null
+    const showingDownloaded = this._progressBlockType === "downloaded" && this.progressContentTarget.querySelector(".recap-progress-count")
+
+    if (target != null && showingDownloaded) {
+      this.animateProgressCount(target)
+      return
+    }
+
+    let html = ""
     if (phase === "computing") {
-      lines.push("Computing your recap…")
+      this._progressBlockType = "computing"
+      html = `<p class="text-white">Computing your recap…</p>`
     } else if (phase === "downloading") {
       if (queuePosition != null) {
         if (queuePosition > 0) {
-          lines.push(queuePosition === 1 ? "You're next!" : `Position in queue: ${queuePosition}`)
+          this._progressBlockType = "position"
+          html = `<p class="text-white">${queuePosition === 1 ? "You're next!" : `Position in queue: ${queuePosition}`}</p>`
+        } else if (downloaded != null && downloaded >= 0) {
+          this._progressBlockType = "downloaded"
+          html = `<p class="text-white">Downloaded <span class="recap-progress-count tabular-nums font-semibold text-emerald-400">${this.lastProgressCount ?? 0}</span> matches</p>`
+          this.progressContentTarget.innerHTML = html
+          this.animateProgressCount(target)
+          this.progressBlockTarget.classList.remove("hidden")
+          if (this.hasProgressSpinnerTarget) {
+            this.progressSpinnerTarget.classList.toggle("hidden", false)
+          }
+          return
         } else {
-          lines.push("Your recap is being generated…")
+          this._progressBlockType = "generating"
+          html = `<p class="text-white">Your recap is being generated…</p>`
         }
-      } else if (lines.length === 0) {
-        // Queue position unknown but we're in downloading phase – likely waiting in queue
-        lines.push("Waiting in queue…")
+      } else {
+        this._progressBlockType = "waiting"
+        html = `<p class="text-white">Waiting in queue…</p>`
       }
-      if (processed != null && processed >= 0) {
-        const dl = downloaded != null && downloaded >= 0 ? downloaded : 0
-        if (dl > 0) {
-          lines.push(`Processed ${processed} matches, ${dl} from ${recapYear()}…`)
-        } else {
-          lines.push(`Processed ${processed} matches (scanning for ${recapYear()})…`)
-        }
-      } else if (downloaded != null && downloaded >= 0) {
-        lines.push(downloaded === 0 ? `Scanning your match history for ${recapYear()}…` : `Downloaded ${downloaded} matches…`)
-      }
-      if (lines.length === 0) {
-        lines.push(`Contacting Riot to get all your games from ${recapYear()}…`)
+      if (!html) {
+        this._progressBlockType = "contacting"
+        html = `<p class="text-white">Contacting Riot to get all your games from ${recapYear()}…</p>`
       }
     } else {
-      lines.push(`Contacting Riot to get all your games from ${recapYear()}…`)
+      this._progressBlockType = "contacting"
+      html = `<p class="text-white">Contacting Riot to get all your games from ${recapYear()}…</p>`
     }
 
-    this.progressContentTarget.innerHTML = lines.map((line) => `<p class="text-white">${escapeHtml(line)}</p>`).join("")
+    this.progressContentTarget.innerHTML = html
     this.progressBlockTarget.classList.remove("hidden")
     if (this.hasProgressSpinnerTarget) {
       const showSpinner = phase === "downloading" || phase === "computing"
@@ -272,7 +289,44 @@ export default class extends Controller {
     }
   }
 
+  animateProgressCount(target) {
+    const span = this.progressContentTarget?.querySelector(".recap-progress-count")
+    if (!span) return
+    if (this._progressCountRaf) cancelAnimationFrame(this._progressCountRaf)
+    const start = this.lastProgressCount ?? parseInt(span.textContent || "0", 10)
+    this.lastProgressCount = target
+    if (start === target) {
+      span.textContent = target.toLocaleString()
+      return
+    }
+    const diff = Math.abs(target - start)
+    const duration = Math.min(2000, 800 + diff * 25)
+    const startTime = performance.now()
+    const update = (currentTime) => {
+      const elapsed = currentTime - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = progress < 0.5
+        ? 4 * progress * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2
+      const current = Math.round(start + (target - start) * eased)
+      span.textContent = current.toLocaleString()
+      if (progress < 1) {
+        this._progressCountRaf = requestAnimationFrame(update)
+      } else {
+        span.textContent = target.toLocaleString()
+        this._progressCountRaf = null
+      }
+    }
+    this._progressCountRaf = requestAnimationFrame(update)
+  }
+
   hideProgressBlock() {
+    if (this._progressCountRaf) {
+      cancelAnimationFrame(this._progressCountRaf)
+      this._progressCountRaf = null
+    }
+    this.lastProgressCount = undefined
+    this._progressBlockType = undefined
     if (this.hasProgressBlockTarget) {
       this.progressBlockTarget.classList.add("hidden")
     }
@@ -308,6 +362,45 @@ export default class extends Controller {
     return `Contacting Riot to get all your games from ${recapYear()}…`
   }
 
+  updateRecapAction(isGenerating, hasRecap) {
+    const el = this.recapActionTarget
+    if (isGenerating) {
+      el.href = "#"
+      el.textContent = "Generating…"
+      el.classList.add("pointer-events-none", "opacity-75")
+      el.setAttribute("aria-disabled", "true")
+    } else {
+      if (hasRecap) {
+        el.href = this.recapPageUrlValue || "#"
+        el.textContent = "Watch my recap"
+      } else {
+        el.href = "#"
+        el.textContent = "Generate my recap"
+      }
+      el.classList.remove("pointer-events-none", "opacity-75")
+      el.removeAttribute("aria-disabled")
+    }
+  }
+
+  recapAction(event) {
+    const statuses = this.recapStatusesValue || {}
+    const year = recapYear()
+    const status = statuses[String(year)]
+    const isGenerating = status === "generating"
+    const hasRecap = status === "ready"
+
+    if (isGenerating) {
+      event.preventDefault()
+      return
+    }
+    if (hasRecap) {
+      // Allow default navigation to recap page
+      return
+    }
+    event.preventDefault()
+    this.generate(event)
+  }
+
   updateButtonState(name, disabled, disabledText, normalText) {
     const targetMap = { generate: "generateButton", view: "viewButton", compute: "computeButton" }
     const targetName = targetMap[name]
@@ -337,6 +430,11 @@ export default class extends Controller {
     if (this.generating) return
     this.generating = true
     this.setButtonLoading("generate", true)
+    if (this.hasRecapActionTarget) {
+      this.recapActionTarget.textContent = "Generating…"
+      this.recapActionTarget.href = "#"
+      this.recapActionTarget.classList.add("pointer-events-none", "opacity-75")
+    }
     this.showMessage("", "")
 
     const year = recapYear()
@@ -451,8 +549,8 @@ export default class extends Controller {
         this.recapStatusesValue = { ...(this.recapStatusesValue || {}), [year]: "ready" }
         this.updateStatusDisplay()
         this.showMessage("", "")
-        const champNames = await this.fetchChampionNames()
-        this.renderWrappedCards(data, year, champNames)
+        const [champNames, itemNames] = await Promise.all([this.fetchChampionNames(), this.fetchItemNames()])
+        this.renderWrappedCards(data, year, champNames, itemNames)
       } else if (response.ok) {
         this.showMessage(data.error || "No recap data yet. Generate a recap first.", "error")
       } else {
@@ -471,12 +569,32 @@ export default class extends Controller {
     try {
       const res = await fetch("https://ddragon.leagueoflegends.com/cdn/16.4.1/data/en_US/champion.json")
       const json = await res.json().catch(() => ({}))
-      const map = {}
+      const names = {}
+      const splashKeys = {}
       const data = json.data || {}
       for (const champ of Object.values(data)) {
-        if (champ && champ.key) map[String(champ.key)] = champ.name || champ.id
+        if (champ && champ.key) {
+          const id = String(champ.key)
+          names[id] = champ.name || champ.id
+          splashKeys[id] = champ.id || champ.name
+        }
       }
-      return map
+      return Object.assign(names, { _splashKeys: splashKeys })
+    } catch {
+      return { _splashKeys: {} }
+    }
+  }
+
+  async fetchItemNames() {
+    try {
+      const res = await fetch("https://ddragon.leagueoflegends.com/cdn/16.4.1/data/en_US/item.json")
+      const json = await res.json().catch(() => ({}))
+      const names = {}
+      const data = json.data || {}
+      for (const [id, item] of Object.entries(data)) {
+        if (item && item.name) names[String(id)] = item.name
+      }
+      return names
     } catch {
       return {}
     }
@@ -539,7 +657,7 @@ export default class extends Controller {
     return labels[key] || key.replace(/Pings?$/i, "").replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()).trim()
   }
 
-  renderWrappedCards(data, year, champNames = {}) {
+  renderWrappedCards(data, year, champNames = {}, itemNames = {}) {
     if (!this.hasCardsContainerTarget || !this.hasWrappedModalTarget) return
 
     const list = data.most_played_with || []
@@ -566,105 +684,60 @@ export default class extends Controller {
       const profileIconUrl = this.profileIconUrlValue || data.profile_icon_url || ""
       cards.push({ type: "intro", html: this.cardIntro(playerRiotId, year, profileIconUrl) })
     }
-    const mostPopularQueue = extraStats.mostPopularQueueType || extraStats["mostPopularQueueType"]
     const queueDistribution = extraStats.queueDistribution || extraStats["queueDistribution"]
-    let queueCard = null
-    if (mostPopularQueue?.type && (mostPopularQueue.games ?? 0) > 0) {
-      queueCard = this.cardMostPopularQueueType(mostPopularQueue, queueDistribution)
-    } else if (queueDistribution && Object.keys(queueDistribution).length > 0) {
-      const top = Object.entries(queueDistribution).filter(([k]) => k !== "other").sort((a, b) => b[1] - a[1])[0]
-      const derived = top ? { type: top[0], games: top[1] } : null
-      queueCard = this.cardMostPopularQueueType(derived || { type: "other", games: Object.values(queueDistribution).reduce((a, b) => a + Number(b), 0) }, queueDistribution)
-    }
-    const totalGames = queueDistribution && typeof queueDistribution === "object"
+    const totalGamesFromQueue = queueDistribution && typeof queueDistribution === "object"
       ? Object.values(queueDistribution).reduce((a, b) => a + (Number(b) || 0), 0)
       : 0
-    const timeByQueue = extraStats.timeByQueue || extraStats["timeByQueue"] || extraStats.time_by_queue || extraStats["time_by_queue"]
-    const timeCard = totalGameSeconds > 0 ? this.cardTime(totalGameSeconds, totalGames, timeByQueue) : null
-    if (queueCard || timeCard) {
-      const left = queueCard || { header: "", chart: "" }
-      const right = timeCard || { header: "", chart: "" }
-      const content = queueCard && timeCard
-        ? `<div class="grid w-full max-w-2xl grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-12 md:gap-y-6 md:items-start">
-  <div class="flex flex-col items-center text-center">${left.header}</div>
-  <div class="flex flex-col items-center text-center">${right.header}</div>
-  <div class="flex flex-col items-center gap-5">${left.chart}</div>
-  <div class="flex flex-col items-center gap-5">${right.chart}</div>
-</div>`
-        : (() => { const c = queueCard || timeCard; const chart = c.chart ? `<div class="mt-6 flex flex-col items-center gap-5">${c.chart}</div>` : ""; return `<div class="flex w-full max-w-2xl flex-col items-center text-center">${c.header}${chart}</div>` })()
-      cards.push({ type: "queueAndTime", html: content })
+    const gamesCount = extraStats.gamesCount ?? extraStats["gamesCount"] ?? totalGamesFromQueue
+    const uniqueChampions = Number(extraStats.uniqueChampionsPlayed ?? extraStats["uniqueChampionsPlayed"] ?? 0)
+    const hasOverview = gamesCount > 0 || totalGameSeconds > 0 || uniqueChampions > 0
+    if (hasOverview) {
+      cards.push({ type: "overview", html: this.cardOverview(gamesCount, totalGameSeconds, uniqueChampions) })
     }
-    const championPersonality = extraStats.championPersonality || extraStats["championPersonality"]
-    if (championPersonality && this.hasChampionPersonalityData(championPersonality)) {
-      cards.push({ type: "championPersonality", html: this.cardChampionPersonality(championPersonality, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON, champNames) })
+    const championPersonalityData = extraStats.championPersonality || extraStats["championPersonality"] || extraStats.champion_personality || extraStats["champion_personality"]
+    const mostPlayed = championPersonalityData?.mostPlayedChampion || championPersonalityData?.["mostPlayedChampion"] || championPersonalityData?.most_played_champion || championPersonalityData?.["most_played_champion"]
+    if (mostPlayed && (mostPlayed.games ?? mostPlayed["games"]) > 0) {
+      cards.push({ type: "mostPlayedChampion", html: this.cardMostPlayedChampion(mostPlayed, champNames, CHAMP_IMG_DDRAGON) })
     }
-    if (totalKills > 0 || totalDeaths > 0 || totalAssists > 0) {
-      cards.push({ type: "kda", html: this.cardKda(totalKills, totalDeaths, totalAssists) })
+    const topChampions = extraStats.topChampions ?? extraStats["topChampions"] ?? extraStats.top_champions ?? extraStats["top_champions"]
+    if (topChampions && Array.isArray(topChampions) && topChampions.length > 0) {
+      cards.push({ type: "championPool", html: this.cardChampionPool(topChampions, champNames, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON) })
     }
-    const totalLastHits = Number(extraStats.totalLastHits ?? extraStats["totalLastHits"] ?? 0) || 0
-    const avgCsPerMin = Number(extraStats.avgCsPerMin ?? extraStats["avgCsPerMin"]) || null
-    if (totalGoldSpent > 0 || totalLastHits > 0 || (avgCsPerMin != null && avgCsPerMin > 0)) {
-      cards.push({ type: "economy", html: this.cardGoldAndLastHits(totalGoldSpent, totalLastHits, avgCsPerMin) })
+    const mvpInsight = extraStats.mvpInsight ?? extraStats["mvpInsight"]
+    if (mvpInsight) {
+      const archetype = typeof mvpInsight === "string" ? mvpInsight : (mvpInsight.archetype ?? mvpInsight["archetype"])
+      const stats = (typeof mvpInsight === "object" && mvpInsight != null) ? (mvpInsight.stats ?? mvpInsight["stats"] ?? []) : []
+      cards.push({ type: "mvpInsight", html: this.cardMvpInsight(archetype, stats) })
     }
-    const playstyleIdentity = extraStats.playstyleIdentity || extraStats["playstyleIdentity"]
-    if (playstyleIdentity && this.hasPlaystyleIdentityData(playstyleIdentity)) {
-      cards.push({ type: "playstyle", html: this.cardPlaystyleIdentity(playstyleIdentity) })
+    const bestGame = extraStats.bestGame ?? extraStats["bestGame"]
+    const worstGame = extraStats.worstGame ?? extraStats["worstGame"]
+    if (bestGame || worstGame) {
+      cards.push({ type: "bestAndWorstGame", html: this.cardBestAndWorstGame(bestGame, worstGame, champNames, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON) })
     }
-    const clutchChaos = extraStats.clutchChaosMoments || extraStats["clutchChaosMoments"]
-    if (clutchChaos && this.hasClutchChaosData(clutchChaos)) {
-      cards.push({ type: "clutch", html: this.cardClutchChaos(clutchChaos) })
-    }
-    const economyScaling = extraStats.economyScaling || extraStats["economyScaling"]
-    if (economyScaling && this.hasEconomyScalingData(economyScaling)) {
-      cards.push({ type: "economyScaling", html: this.cardEconomyScaling(economyScaling) })
-    }
-    const visionMapIq = extraStats.visionMapIq || extraStats["visionMapIq"]
-    if (visionMapIq && this.hasVisionMapIqData(visionMapIq)) {
-      cards.push({ type: "visionMapIq", html: this.cardVisionMapIq(visionMapIq) })
-    }
-    const damageProfile = extraStats.damageProfile || extraStats["damageProfile"]
-    if (damageProfile && this.hasDamageProfileData(damageProfile)) {
-      cards.push({ type: "damageProfile", html: this.cardDamageProfile(damageProfile) })
-    }
-    const botLaneSynergy = extraStats.botLaneSynergy || extraStats["botLaneSynergy"]
-    if (botLaneSynergy && this.hasBotLaneSynergyData(botLaneSynergy)) {
-      cards.push({ type: "botLaneSynergy", html: this.cardBotLaneSynergy(botLaneSynergy) })
-    }
-    const memeTitles = extraStats.memeTitles || extraStats["memeTitles"]
-    if (memeTitles && Array.isArray(memeTitles) && memeTitles.length > 0) {
-      cards.push({ type: "memeTitles", html: this.cardMemeTitles(memeTitles) })
-    }
-    if (list.length > 0) {
-      cards.push({ type: "teammates", html: this.cardTeammates(list) })
-    }
-    if (enemies.length > 0) {
-      cards.push({ type: "nemesis", html: this.cardNemesis(enemies) })
-    }
-    if (favItems.length > 0) {
-      cards.push({ type: "items", html: this.cardItems(favItems, ITEM_IMG_BASE) })
+    if (list.length > 0 || enemies.length > 0) {
+      cards.push({ type: "friendsAndFoes", html: this.cardFriendsAndFoes(list, enemies) })
     }
     if (ourTeamBans.length > 0 || enemyTeamBans.length > 0) {
-      cards.push({ type: "bans", html: this.cardBans(ourTeamBans, enemyTeamBans, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON) })
+      cards.push({ type: "bans", html: this.cardBans(ourTeamBans, enemyTeamBans, champNames, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON) })
     }
-    if (totalPings > 0) {
-      cards.push({ type: "pings", html: this.cardPings(totalPings, pingBreakdown) })
-    }
-    const extraEntries = Object.entries(extraStats).filter(
-      ([key, v]) => !["totalLastHits", "avgCsPerMin", "playstyleIdentity", "clutchChaosMoments", "economyScaling", "championPersonality", "visionMapIq", "damageProfile", "botLaneSynergy", "memeTitles", "mostPopularQueueType", "queueDistribution", "timeByQueue", "time_by_queue"].includes(key) && v != null && v !== "" && Number(v) > 0
-    )
-    if (extraEntries.length > 0) {
-      cards.push({ type: "extra", html: this.cardExtra(extraEntries) })
+    const BISCUIT_ITEM_ID = 2010
+    const filteredFavItems = (favItems || []).filter((item) => item && Number(item.item_id ?? item.itemId) !== BISCUIT_ITEM_ID)
+    if (filteredFavItems.length > 0) {
+      cards.push({ type: "items", html: this.cardItems(filteredFavItems, itemNames, ITEM_IMG_BASE) })
     }
 
     if (cards.length === 0) {
       cards.push({ type: "empty", html: '<p class="text-stone-500 text-lg">No recap data for this year.</p>' })
     }
 
-    this.cardsContainerTarget.innerHTML = cards.map((c) =>
-      `<div class="wrapped-card flex min-w-full flex-shrink-0 snap-start snap-always items-center justify-center p-8" role="group" aria-roledescription="slide">
-        <div class="flex max-w-lg flex-col items-center text-center">${c.html}</div>
+    this.cardsContainerTarget.innerHTML = cards.map((c) => {
+      const isWideCard = c.type === "mostPlayedChampion" || c.type === "championPool" || c.type === "bestAndWorstGame" || c.type === "friendsAndFoes"
+      const maxWidth = c.type === "championPool" ? "max-w-4xl min-w-0" : c.type === "bestAndWorstGame" ? "max-w-5xl min-w-0" : c.type === "mostPlayedChampion" ? "max-w-2xl" : c.type === "friendsAndFoes" ? "max-w-2xl" : ""
+      const innerClass = isWideCard ? `flex w-full ${maxWidth} flex-col items-center` : "flex max-w-lg flex-col items-center text-center"
+      return `<div class="wrapped-card flex min-w-full flex-shrink-0 snap-center snap-always items-center justify-center p-8" role="group" aria-roledescription="slide">
+        <div class="${innerClass}">${c.html}</div>
       </div>`
-    ).join("")
+    }).join("")
 
     this.wrappedModalTarget.classList.remove("hidden")
     this.wrappedModalTarget.setAttribute("aria-hidden", "false")
@@ -681,19 +754,232 @@ export default class extends Controller {
     wrappedController?.refresh()
   }
 
+  championAbilityVideoUrl(champ) {
+    if (!champ) return ""
+    const cid = champ.championId ?? champ["championId"] ?? champ.champion_id ?? champ["champion_id"]
+    const id = parseInt(cid, 10)
+    if (Number.isNaN(id) || id <= 0) return ""
+    const padded = String(id).padStart(4, "0")
+    return `https://d28xe8vt774jo5.cloudfront.net/champion-abilities/${padded}/ability_${padded}_R1.webm`
+  }
+
+  championSplashUrl(champ, _ddragonBase, champNames = {}) {
+    if (!champ) return ""
+    let charId = champ.key ?? champ["key"]
+    if (!charId && champNames && champNames._splashKeys) {
+      const cid = champ.championId ?? champ["championId"] ?? champ.champion_id ?? champ["champion_id"]
+      charId = champNames._splashKeys[String(cid)]
+    }
+    if (charId && /^[a-zA-Z0-9_]+$/.test(String(charId))) {
+      const name = String(charId).toLowerCase()
+      return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/characters/${name}/skins/base/images/${name}_splash_uncentered_0.jpg`
+    }
+    return ""
+  }
+
+  cardMostPlayedChampion(mostPlayed, champNames, ddragonBase) {
+    const champId = mostPlayed.championId ?? mostPlayed["championId"] ?? mostPlayed.champion_id ?? mostPlayed["champion_id"]
+    const name = mostPlayed.name ?? mostPlayed["name"] ?? champNames[String(champId)] ?? `Champion ${champId ?? ""}`
+    const games = mostPlayed.games ?? mostPlayed["games"] ?? 0
+    const winrate = mostPlayed.winrate ?? mostPlayed["winrate"]
+    const kda = mostPlayed.kda ?? mostPlayed["kda"]
+    const kills = kda?.kills ?? kda?.["kills"] ?? 0
+    const deaths = kda?.deaths ?? kda?.["deaths"] ?? 0
+    const assists = kda?.assists ?? kda?.["assists"] ?? 0
+    const kdaStr = games > 0 ? `${Math.round(kills / games)} / ${Math.round(deaths / games)} / ${Math.round(assists / games)}` : ""
+    const videoUrl = this.championAbilityVideoUrl(mostPlayed)
+    const splashUrl = this.championSplashUrl(mostPlayed, ddragonBase, champNames)
+    const iconUrl = this.championIconUrl(mostPlayed, ddragonBase, "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons")
+    const posterUrl = splashUrl || iconUrl
+    let mediaHtml = ""
+    if (videoUrl) {
+      const fallback = posterUrl ? `<img src="${escapeHtml(posterUrl)}" alt="" class="absolute inset-0 hidden h-full w-full object-cover object-top" aria-hidden="true">` : ""
+      mediaHtml = `<video src="${escapeHtml(videoUrl)}" poster="${escapeHtml(posterUrl || "")}" class="absolute inset-0 h-full w-full object-cover object-top" autoplay loop muted playsinline onerror="this.style.display='none';const i=this.nextElementSibling;if(i)i.classList.remove('hidden')"></video>${fallback}`
+    } else if (splashUrl) {
+      mediaHtml = `<img src="${escapeHtml(splashUrl)}" alt="" class="absolute inset-0 h-full w-full object-cover object-top">`
+    } else if (iconUrl) {
+      mediaHtml = `<img src="${escapeHtml(iconUrl)}" alt="" class="absolute inset-0 h-full w-full object-cover opacity-30">`
+    }
+    return `
+      <p class="mb-4 text-sm font-semibold uppercase tracking-[0.25em] text-stone-500">Most Played Champion</p>
+      <div class="relative flex min-h-[280px] w-full items-end overflow-hidden rounded-xl bg-stone-800 sm:min-h-[320px] md:min-h-[360px]">
+        ${mediaHtml}
+        <div class="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/50 to-transparent"></div>
+        <div class="relative z-10 w-full p-6 text-left">
+          <h3 class="font-beaufort text-4xl font-bold text-white drop-shadow-lg sm:text-5xl">${escapeHtml(String(name))}</h3>
+          <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 font-medium text-stone-200">
+            <span>${escapeHtml(String(games))} Games</span>
+            ${winrate != null ? `<span>${escapeHtml(Number(winrate).toFixed(0))}% WR</span>` : ""}
+            ${kdaStr ? `<span>${escapeHtml(kdaStr)} KDA</span>` : ""}
+          </div>
+        </div>
+      </div>
+    `
+  }
+
+  winrateColorClass(winrate) {
+    if (winrate == null) return "text-stone-400"
+    const w = Number(winrate)
+    if (w >= 50) return "text-emerald-400"
+    if (w >= 45) return "text-cyan-400"
+    return "text-red-400"
+  }
+
+  cardChampionPool(champions, champNames, ddragonBase, cdragonBase) {
+    const iconUrl = (c) => this.championIconUrl(c, ddragonBase, cdragonBase)
+    const splashUrl = (c) => this.championSplashUrl(c, ddragonBase, champNames)
+    const cards = champions.slice(0, 6).map((champ) => {
+      const name = champ.name ?? champ["name"] ?? champNames[String(champ.championId ?? champ["championId"])] ?? `Champ ${champ.championId ?? ""}`
+      const games = champ.games ?? champ["games"] ?? 0
+      const winrate = champ.winrate ?? champ["winrate"]
+      const wrClass = this.winrateColorClass(winrate)
+      const splash = splashUrl(champ)
+      const icon = iconUrl(champ)
+      const imgSrc = splash || icon
+      return `
+        <div class="relative flex aspect-[3/4] shrink-0 flex-col overflow-hidden rounded-2xl bg-stone-900 shadow-2xl ring-1 ring-stone-700/50 ring-inset w-[140px] sm:w-[160px] md:w-[180px]" data-carousel-card>
+          ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="absolute inset-0 h-full w-full object-cover object-[80%_top]" onerror="this.style.display='none'">` : ""}
+          <div class="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-900/20 to-transparent"></div>
+          <div class="absolute inset-0 rounded-2xl ring-1 ring-white/5 ring-inset" aria-hidden="true"></div>
+          <div class="relative z-10 mt-auto flex flex-col justify-end bg-gradient-to-t from-black/80 to-transparent p-4">
+            <p class="font-beaufort text-lg font-bold tracking-wide text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] sm:text-xl">${escapeHtml(String(name))}</p>
+            <p class="mt-0.5 text-sm text-stone-300">${escapeHtml(String(games))} games</p>
+            ${winrate != null ? `<p class="mt-0.5 text-sm font-semibold ${wrClass}">${escapeHtml(Number(winrate).toFixed(0))}% WR</p>` : ""}
+          </div>
+        </div>
+      `
+    }).join("")
+    const cardsDuplicated = cards + cards
+    return `
+      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-stone-500">Champion Pool</p>
+      <div class="w-full overflow-hidden" data-controller="champion-pool-carousel">
+        <div class="flex flex-nowrap gap-5" style="width: max-content" data-carousel-track>
+          ${cardsDuplicated}
+        </div>
+      </div>
+    `
+  }
+
+  cardMvpInsight(archetype, stats = []) {
+    const label = String(archetype || "Player").trim()
+    const statsList = Array.isArray(stats) ? stats : []
+    const statsHtml = statsList
+      .filter((s) => s && (s.label || s["label"]))
+      .map((s) => {
+        const l = s.label ?? s["label"]
+        const v = s.value ?? s["value"]
+        return `<li class="flex justify-between gap-6 text-stone-300"><span>${escapeHtml(String(l))}</span><span class="tabular-nums font-semibold text-white">${escapeHtml(String(v))}</span></li>`
+      })
+      .join("")
+    const badgeImg = "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/hextech-chest-gold.svg"
+    return `
+      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-stone-500">Your Playstyle</p>
+      <div class="flex flex-col items-center gap-6">
+        <img src="${escapeHtml(badgeImg)}" alt="" class="h-24 w-24 sm:h-28 sm:w-28 object-contain" onerror="this.style.display='none'">
+        <p class="font-beaufort text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-white whitespace-nowrap"><span class="text-white">You are a </span><span class="text-cyan-400">${escapeHtml(label)}</span></p>
+      </div>
+      ${statsHtml ? `<ul class="mt-8 flex flex-col gap-2 text-sm sm:text-base">${statsHtml}</ul>` : ""}
+    `
+  }
+
+  cardBestAndWorstGame(bestGame, worstGame, champNames = {}, ddragonBase, cdragonBase) {
+    const cardWrapper = (content, isMvp) => `
+      <div class="rounded-2xl p-6">
+        ${content}
+      </div>
+    `
+    const bestHtml = !bestGame ? "" : (() => {
+      const bg = bestGame
+      const k = Number(bg.kills ?? bg["kills"] ?? 0)
+      const d = Number(bg.deaths ?? bg["deaths"] ?? 0)
+      const a = Number(bg.assists ?? bg["assists"] ?? 0)
+      const damage = Number(bg.damage ?? bg["damage"] ?? 0)
+      const sec = Number(bg.durationSeconds ?? bg["durationSeconds"] ?? 0)
+      const mins = Math.floor(sec / 60)
+      const damageStr = damage >= 1000 ? `${(damage / 1000).toFixed(0)}k` : String(damage)
+      const champImg = this.championSplashUrl(bg, ddragonBase, champNames) || this.championIconUrl(bg, ddragonBase, cdragonBase)
+      const imgHtml = champImg ? `<img src="${escapeHtml(champImg)}" alt="" class="absolute inset-0 h-full w-full object-cover object-[80%_top]" onerror="this.style.display='none'">` : ""
+      const inner = `
+        <p class="mb-4 text-xs font-semibold uppercase tracking-[0.35em] text-stone-500">Best Game</p>
+        <div class="relative flex flex-col items-center">
+          <div class="relative aspect-[3/4] w-[280px] sm:w-[320px] overflow-hidden rounded-xl shadow-2xl">
+            ${imgHtml}
+            <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent"></div>
+            <div class="absolute inset-x-0 bottom-0 p-4 text-center">
+              <p class="font-beaufort text-4xl sm:text-5xl font-bold tracking-tight text-white tabular-nums drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">${k} <span class="text-white/60">/</span> ${d} <span class="text-white/60">/</span> ${a}</p>
+            </div>
+          </div>
+        </div>
+        <p class="mt-5 text-2xl font-bold text-cyan-400 tabular-nums">${escapeHtml(damageStr)} damage</p>
+        <p class="mt-1 text-lg text-stone-400">${mins} min</p>
+      `
+      return cardWrapper(inner, true)
+    })()
+    const worstHtml = !worstGame ? "" : (() => {
+      const wg = worstGame
+      const k = Number(wg.kills ?? wg["kills"] ?? 0)
+      const d = Number(wg.deaths ?? wg["deaths"] ?? 0)
+      const a = Number(wg.assists ?? wg["assists"] ?? 0)
+      const champImg = this.championSplashUrl(wg, ddragonBase, champNames) || this.championIconUrl(wg, ddragonBase, cdragonBase)
+      const imgHtml = champImg ? `<img src="${escapeHtml(champImg)}" alt="" class="absolute inset-0 h-full w-full object-cover object-[80%_top] opacity-95" onerror="this.style.display='none'">` : ""
+      const inner = `
+        <p class="mb-4 text-xs font-semibold uppercase tracking-[0.35em] text-stone-500">Worst Game</p>
+        <div class="relative flex flex-col items-center">
+          <div class="relative aspect-[3/4] w-[280px] sm:w-[320px] overflow-hidden rounded-xl shadow-2xl">
+            ${imgHtml}
+            <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent"></div>
+            <div class="absolute inset-x-0 bottom-0 p-4 text-center">
+              <p class="font-beaufort text-4xl sm:text-5xl font-bold tracking-tight text-red-400 tabular-nums drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">${k} <span class="text-white/50">/</span> ${d} <span class="text-white/50">/</span> ${a}</p>
+            </div>
+          </div>
+        </div>
+        <p class="mt-5 text-xl font-medium italic text-stone-400">We won't talk about this one.</p>
+      `
+      return cardWrapper(inner, false)
+    })()
+    const bothExist = bestHtml && worstHtml
+    if (bothExist) {
+      return `
+        <div class="grid w-full grid-cols-1 gap-10 md:grid-cols-2 md:gap-14">
+          <div class="flex flex-col items-center text-center">${bestHtml}</div>
+          <div class="flex flex-col items-center text-center">${worstHtml}</div>
+        </div>
+      `
+    }
+    return `<div class="flex flex-col items-center text-center">${bestHtml || worstHtml}</div>`
+  }
+
+  cardOverview(gamesCount, totalGameSeconds, uniqueChampions) {
+    const games = Math.floor(Number(gamesCount) || 0)
+    const hours = Math.floor((Number(totalGameSeconds) || 0) / 3600)
+    const champions = Math.floor(Number(uniqueChampions) || 0)
+    const stat = (num, label) =>
+      `<div class="flex flex-col items-center gap-1">
+        <span class="font-beaufort text-6xl sm:text-7xl md:text-8xl font-bold tabular-nums tracking-tight text-white">${escapeHtml(String(num))}</span>
+        <span class="font-beaufort text-base sm:text-lg font-medium uppercase tracking-[0.2em] text-stone-400">${escapeHtml(label)}</span>
+      </div>`
+    return `
+      <div class="flex flex-col items-center gap-12 sm:gap-16">
+        ${games > 0 ? stat(games, "Games Played") : ""}
+        ${hours > 0 ? stat(hours, "Hours") : ""}
+        ${champions > 0 ? stat(champions, "Champions") : ""}
+      </div>
+    `
+  }
+
   cardIntro(playerRiotId, year, profileIconUrl) {
     const initial = (playerRiotId || "S").charAt(0).toUpperCase()
     const safeUrl = safeProfileIconUrl(profileIconUrl)
     const avatarHtml = safeUrl
-      ? `<img src="${escapeHtml(safeUrl)}" alt="" class="h-full w-full object-cover" onerror="this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')"><span class="hidden text-6xl font-bold text-white">${escapeHtml(initial)}</span>`
-      : `<span class="text-6xl font-bold text-white">${escapeHtml(initial)}</span>`
+      ? `<img src="${escapeHtml(safeUrl)}" alt="" class="h-full w-full object-cover" onerror="this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')"><span class="hidden font-beaufort text-6xl font-bold text-white">${escapeHtml(initial)}</span>`
+      : `<span class="font-beaufort text-6xl font-bold text-white">${escapeHtml(initial)}</span>`
     return `
-      <p class="text-3xl font-medium uppercase tracking-widest text-white">Your ${escapeHtml(String(year))} LoL Wrapped</p>
+      <p class="font-beaufort text-3xl font-medium uppercase tracking-widest text-white">Your ${escapeHtml(String(year))} LoL Wrapped</p>
       <div class="my-8 flex h-40 w-40 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-500/30">
         ${avatarHtml}
       </div>
-      <h2 class="text-5xl font-bold text-white">${escapeHtml(playerRiotId || "Summoner")}</h2>
-      <p class="mt-6 text-lg text-stone-400">Swipe to see your stats</p>
+      <h2 class="font-beaufort text-5xl font-bold text-white">${escapeHtml(playerRiotId || "Summoner")}</h2>
+      <p class="mt-6 font-beaufort text-lg text-stone-400">Swipe to see your stats</p>
     `
   }
 
@@ -702,7 +988,7 @@ export default class extends Controller {
       ranked_solo: { name: "The Ladder Climber", queue: "Ranked Solo Duo", color: "#60a5fa", bgClass: "bg-blue-400" },
       ranked_flex: { name: "The Premade Professor", queue: "Ranked Flex", color: "#a78bfa", bgClass: "bg-violet-400" },
       normal_draft: { name: "The Low-Stakes Legend", queue: "Normal Draft", color: "#34d399", bgClass: "bg-emerald-400" },
-      blind_pick: { name: "Role Roulette Survivor", queue: "Blind Pick", color: "#fbbf24", bgClass: "bg-amber-400" },
+      blind_pick: { name: "Role Roulette Survivor", queue: "Blind Pick", color: "#38bdf8", bgClass: "bg-sky-400" },
       aram: { name: "The Bridge Brawler", queue: "ARAM", color: "#f87171", bgClass: "bg-red-400" },
       clash: { name: "The Trophy Chaser", queue: "Clash", color: "#f472b6", bgClass: "bg-pink-400" },
       urf_rgm: { name: "The Funmaxxer", queue: "URF / RGM", color: "#22d3ee", bgClass: "bg-cyan-400" },
@@ -849,7 +1135,7 @@ export default class extends Controller {
       ranked_solo: { queue: "Ranked Solo/Duo", color: "#60a5fa", bgClass: "bg-blue-400" },
       ranked_flex: { queue: "Ranked Flex", color: "#a78bfa", bgClass: "bg-violet-400" },
       normal_draft: { queue: "Normal Draft", color: "#34d399", bgClass: "bg-emerald-400" },
-      blind_pick: { queue: "Blind Pick", color: "#fbbf24", bgClass: "bg-amber-400" },
+      blind_pick: { queue: "Blind Pick", color: "#38bdf8", bgClass: "bg-sky-400" },
       aram: { queue: "ARAM", color: "#f87171", bgClass: "bg-red-400" },
       clash: { queue: "Clash", color: "#f472b6", bgClass: "bg-pink-400" },
       urf_rgm: { queue: "URF / RGM", color: "#22d3ee", bgClass: "bg-cyan-400" },
@@ -1450,40 +1736,61 @@ export default class extends Controller {
     `
   }
 
-  cardTeammates(list) {
-    const top10 = list.slice(0, 10)
+  cardFriendsAndFoes(list, enemies) {
+    const topFriends = list.slice(0, 5)
+    const topFoes = enemies.slice(0, 5)
+    const friendsHtml = topFriends.length > 0
+      ? `<div>
+          <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-emerald-500">Most played with</p>
+          <div class="space-y-3">
+            ${topFriends.map((r, i) => {
+              const name = escapeHtml(r.teammate_name || r.teammate_riot_id || "Unknown")
+              const games = r.games ?? 0
+              const wins = r.wins_together ?? r["wins_together"] ?? 0
+              const wr = games > 0 && wins != null ? `${Math.round(100 * wins / games)}% WR` : null
+              return `<div class="flex flex-col gap-0.5"><div class="text-lg"><span class="font-bold text-white">#${i + 1}</span> ${name}</div><div class="text-sm text-stone-500">${wr ? `${wr} · ` : ""}${safeDisplay(games)} games</div></div>`
+            }).join("")}
+          </div>
+        </div>`
+      : `<div>
+          <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-stone-500">Most played with</p>
+          <p class="text-stone-500">No data</p>
+        </div>`
+    const foesHtml = topFoes.length > 0
+      ? `<div>
+          <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-red-400">Most lost to</p>
+          <div class="space-y-3">
+            ${topFoes.map((r, i) => {
+              const name = escapeHtml(r.enemy_name || r.enemy_riot_id || "Unknown")
+              return `<div class="flex flex-col gap-0.5"><div class="text-lg"><span class="font-bold text-red-400">#${i + 1}</span> ${name}</div><div class="text-sm text-stone-500">Beat you <span class="text-white">${safeDisplay(r.times_beat_us)}</span>×</div></div>`
+            }).join("")}
+          </div>
+        </div>`
+      : `<div>
+          <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-stone-500">Most lost to</p>
+          <p class="text-stone-500">No data</p>
+        </div>`
     return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Most played with</p>
-      <div class="mt-6 space-y-2">
-        ${top10.map((r, i) => {
-          const name = escapeHtml(r.teammate_name || r.teammate_riot_id || "Unknown")
-          return `<div class="text-lg"><span class="font-bold text-white">#${i + 1}</span> ${name} <span class="text-stone-500">– ${safeDisplay(r.games)} games</span></div>`
-        }).join("")}
+      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-stone-500">Friends and foes</p>
+      <div class="grid w-full max-w-2xl grid-cols-1 gap-8 md:grid-cols-2 md:gap-12">
+        ${friendsHtml}
+        ${foesHtml}
       </div>
     `
   }
 
-  cardNemesis(enemies) {
-    const top10 = enemies.slice(0, 10)
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Your nemeses</p>
-      <div class="mt-6 space-y-2">
-        ${top10.map((r, i) => {
-          const name = escapeHtml(r.enemy_name || r.enemy_riot_id || "Unknown")
-          return `<div class="text-lg"><span class="font-bold text-red-400">#${i + 1}</span> ${name} <span class="text-stone-500">– beat you ${safeDisplay(r.times_beat_us)}×</span></div>`
-        }).join("")}
-      </div>
-    `
-  }
-
-  cardItems(favItems, ITEM_IMG_BASE) {
+  cardItems(favItems, itemNames = {}, ITEM_IMG_BASE) {
     const items = favItems.filter((item) => item && ((item.item_id ?? item.itemId) != null)).slice(0, 5)
+    const itemName = (item) => {
+      const id = item.item_id ?? item.itemId
+      return item.name ?? item["name"] ?? itemNames[String(id)] ?? `Item ${id}`
+    }
     return `
       <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Top 5 items built</p>
       <div class="mt-6 flex flex-wrap justify-center gap-4">
         ${items.map((item) => {
           const id = safeUrlSegment(item.item_id ?? item.itemId)
-          const name = escapeHtml(item.name || `Item ${item.item_id ?? item.itemId}`)
+          const name = escapeHtml(itemName(item))
           const count = item.count ?? 0
           return `<div class="flex flex-col items-center"><img src="${ITEM_IMG_BASE}/${id}.png" alt="${name}" class="h-14 w-14 rounded" onerror="this.style.display='none'"><span class="mt-2 text-sm text-stone-300">${name}</span><span class="text-white font-semibold">${safeDisplay(count)} games</span></div>`
         }).join("")}
@@ -1491,13 +1798,14 @@ export default class extends Controller {
     `
   }
 
-  cardBans(ourTeamBans, enemyTeamBans, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON) {
+  cardBans(ourTeamBans, enemyTeamBans, champNames = {}, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON) {
     const topOur = ourTeamBans.slice(0, 5)
     const topEnemy = enemyTeamBans.slice(0, 5)
     const banImg = (b) => {
       const url = this.championIconUrl({ key: b.key, championId: b.champion_id }, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON)
       return url ? `<img src="${escapeHtml(url)}" alt="" class="h-8 w-8 shrink-0 rounded-full" onerror="this.style.display='none'">` : ""
     }
+    const banName = (b) => b.name ?? b["name"] ?? champNames[String(b.champion_id ?? b.championId ?? "")] ?? `Champ ${b.champion_id ?? b.championId ?? ""}`
     return `
       <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Top 5 bans</p>
       <div class="mt-6 grid grid-cols-2 gap-6">
@@ -1505,7 +1813,7 @@ export default class extends Controller {
           <p class="mb-2 text-xs text-stone-500">Your team</p>
           <div class="space-y-2">
             ${topOur.map((b) => {
-              const name = escapeHtml(b.name || `Champ ${b.champion_id}`)
+              const name = escapeHtml(banName(b))
               const count = safeDisplay(b.count)
               return `<div class="flex items-center justify-between gap-2"><div class="flex items-center gap-2 min-w-0">${banImg(b)}<span class="text-stone-300 truncate">${name}</span></div><span class="text-white font-semibold shrink-0">${count}×</span></div>`
             }).join("")}
@@ -1515,7 +1823,7 @@ export default class extends Controller {
           <p class="mb-2 text-xs text-stone-500">Enemy team</p>
           <div class="space-y-2">
             ${topEnemy.map((b) => {
-              const name = escapeHtml(b.name || `Champ ${b.champion_id}`)
+              const name = escapeHtml(banName(b))
               const count = safeDisplay(b.count)
               return `<div class="flex items-center justify-between gap-2"><div class="flex items-center gap-2 min-w-0">${banImg(b)}<span class="text-stone-300 truncate">${name}</span></div><span class="text-red-400 font-semibold shrink-0">${count}×</span></div>`
             }).join("")}

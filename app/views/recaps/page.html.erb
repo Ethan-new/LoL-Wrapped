@@ -8,8 +8,14 @@
       <div class="w-24"></div>
     </div>
     <p data-recap-target="message" class="px-4 py-4 text-sm text-stone-400">Loading recap…</p>
-    <div data-controller="wrapped-cards" class="flex flex-1 flex-col min-h-0">
-      <div data-wrapped-cards-target="scrollContainer" data-recap-target="cardsContainer" class="flex flex-1 flex-nowrap overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth" role="region" aria-label="Wrapped cards">
+    <div data-controller="wrapped-cards" class="relative flex flex-1 flex-col min-h-0">
+      <button type="button" data-action="click->wrapped-cards#prev" data-wrapped-cards-target="prevButton" class="absolute left-3 top-1/2 z-20 -translate-y-1/2 flex h-12 w-12 shrink-0 items-center justify-center text-white/90 transition-all duration-200 hover:text-white hover:scale-110 focus:outline-none focus:ring-2 focus:ring-cyan-400/80 focus:ring-offset-2 focus:ring-offset-stone-950 disabled:opacity-25 disabled:pointer-events-none disabled:hover:scale-100" aria-label="Previous card">
+        <svg class="h-8 w-8" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+      </button>
+      <button type="button" data-action="click->wrapped-cards#next" data-wrapped-cards-target="nextButton" class="absolute right-3 top-1/2 z-20 -translate-y-1/2 flex h-12 w-12 shrink-0 items-center justify-center text-white/90 transition-all duration-200 hover:text-white hover:scale-110 focus:outline-none focus:ring-2 focus:ring-cyan-400/80 focus:ring-offset-2 focus:ring-offset-stone-950 disabled:opacity-25 disabled:pointer-events-none disabled:hover:scale-100" aria-label="Next card">
+        <svg class="h-8 w-8" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+      </button>
+      <div data-wrapped-cards-target="scrollContainer" data-recap-target="cardsContainer" class="flex flex-1 flex-nowrap overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth px-4 sm:px-14" role="region" aria-label="Wrapped cards">
         <!-- Cards injected by recap controller -->
       </div>
       <div data-wrapped-cards-target="dots" data-action="click->wrapped-cards#dotsClick" class="flex shrink-0 justify-center gap-2 py-3"></div>

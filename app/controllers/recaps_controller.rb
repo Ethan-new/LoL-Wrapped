@@ -103,19 +103,63 @@ class RecapsController < ApplicationController
 
   def enrich_extra_stats_champion_names(extra_stats)
     return extra_stats if extra_stats.blank?
-    cp = extra_stats["championPersonality"] || extra_stats[:championPersonality]
-    return extra_stats if cp.blank?
     champ_data = champion_data_by_id
     result = extra_stats.dup
-    result["championPersonality"] = (result["championPersonality"] || {}).dup
-    %w[mostPlayedChampion highestWinrateChampion whyDoYouKeepPickingThis].each do |key|
-      entry = result["championPersonality"][key]
-      next if entry.blank?
-      entry = entry.with_indifferent_access if entry.respond_to?(:with_indifferent_access)
-      cid = (entry["championId"] || entry[:championId]).to_s
-      info = champ_data[cid] || {}
-      result["championPersonality"][key] = entry.merge("name" => info["name"], "key" => info["key"])
+
+    cp = result["championPersonality"] || result[:championPersonality]
+    if cp.present?
+      result["championPersonality"] = (result["championPersonality"] || {}).dup
+      %w[mostPlayedChampion highestWinrateChampion whyDoYouKeepPickingThis].each do |key|
+        entry = result["championPersonality"][key]
+        next if entry.blank?
+        entry = entry.with_indifferent_access if entry.respond_to?(:with_indifferent_access)
+        cid = (entry["championId"] || entry[:championId]).to_s
+        info = champ_data[cid] || {}
+        result["championPersonality"][key] = entry.merge("name" => info["name"], "key" => info["key"])
+      end
     end
+
+    top = result["topChampions"] || result[:topChampions]
+    if top.present?
+      result["topChampions"] = Array(top).map do |entry|
+        next if entry.blank?
+        e = entry.with_indifferent_access if entry.respond_to?(:with_indifferent_access)
+        cid = (e["championId"] || e[:championId]).to_s
+        info = champ_data[cid] || {}
+        (e || entry).merge("name" => info["name"], "key" => info["key"])
+      end.compact
+    end
+
+    bg = result["bestGame"] || result[:bestGame]
+    if bg.present?
+      bg = bg.with_indifferent_access if bg.respond_to?(:with_indifferent_access)
+      cid = (bg["championId"] || bg[:championId]).to_s
+      info = champ_data[cid] || {}
+      result["bestGame"] = bg.merge("name" => info["name"], "key" => info["key"])
+    end
+
+    wg = result["worstGame"] || result[:worstGame]
+    if wg.present?
+      wg = wg.with_indifferent_access if wg.respond_to?(:with_indifferent_access)
+      cid = (wg["championId"] || wg[:championId]).to_s
+      info = champ_data[cid] || {}
+      result["worstGame"] = wg.merge("name" => info["name"], "key" => info["key"])
+    end
+
+    wi = result["winrateInsights"] || result[:winrateInsights]
+    if wi.present?
+      wi = wi.dup
+      %w[bestChampion worstChampion].each do |key|
+        entry = wi[key]
+        next if entry.blank?
+        entry = entry.with_indifferent_access if entry.respond_to?(:with_indifferent_access)
+        cid = (entry["championId"] || entry[:championId]).to_s
+        info = champ_data[cid] || {}
+        wi[key] = entry.merge("name" => info["name"], "key" => info["key"])
+      end
+      result["winrateInsights"] = wi
+    end
+
     result
   end
 

@@ -37,17 +37,11 @@
       </button>
     </div>
 
-    <div class="space-y-3 border-t border-stone-600 pt-6" data-controller="recap" data-recap-ingest-url-value="<%= ingest_year_player_path(@player.id) %>" data-recap-compute-url-value="<%= compute_recap_player_path(@player.id) %>" data-recap-status-url-value="<%= recap_statuses_player_path(@player.id) %>" data-recap-statuses-value="<%= (@player.recap_statuses || {}).to_json %>" data-recap-failure-reasons-value="<%= (@player.recap_failure_reasons || {}).to_json %>">
-      <h2 class="text-lg font-semibold text-white">Year Recap (Wrapped-style)</h2>
-      <p class="text-sm text-white">Generate your "most played with" teammates for the previous year. Processing happens in the background and may take a few minutes.</p>
+    <div class="space-y-3 border-t border-stone-600 pt-6" data-controller="recap" data-recap-ingest-url-value="<%= ingest_year_player_path(@player.id) %>" data-recap-status-url-value="<%= recap_statuses_player_path(@player.id) %>" data-recap-statuses-value="<%= (@player.recap_statuses || {}).to_json %>" data-recap-failure-reasons-value="<%= (@player.recap_failure_reasons || {}).to_json %>" data-recap-recap-page-url-value="<%= player_year_recap_path(region: @player.path_params[:region], riot_id_slug: @player.path_params[:riot_id_slug], year: Time.current.year - 1) %>">
       <div class="flex flex-wrap items-center gap-3">
-        <button type="button" data-recap-target="generateButton" data-action="click->recap#generate" class="rounded-lg border border-stone-500 bg-stone-600/50 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-stone-400 hover:bg-stone-500/50 focus:outline-none focus:ring-2 focus:ring-stone-400 focus:ring-offset-2 focus:ring-offset-stone-900 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-stone-700 disabled:bg-stone-900 disabled:text-white/60 disabled:opacity-75">
-          Generate recap
-        </button>
-        <%= link_to "View recap", player_year_recap_path(region: @player.path_params[:region], riot_id_slug: @player.path_params[:riot_id_slug], year: Time.current.year - 1), data: { recap_target: "viewButton", action: "click->recap#navigateToRecap" }, class: "rounded-lg border border-stone-600 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-400 focus:ring-offset-2 focus:ring-offset-stone-900 no-underline inline-block disabled:pointer-events-none disabled:opacity-75" %>
-        <button type="button" data-recap-target="computeButton" data-action="click->recap#compute" class="rounded border border-stone-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-800 hover:text-white disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-stone-700 disabled:bg-stone-900 disabled:text-white/60 disabled:opacity-75" title="Recompute from existing matches — faster than full regenerate, use this to refresh stats">
-          Recompute
-        </button>
+        <a href="#" data-recap-target="recapAction" data-action="click->recap#recapAction" class="rounded-lg border border-stone-500 bg-stone-600/50 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-stone-400 hover:bg-stone-500/50 focus:outline-none focus:ring-2 focus:ring-stone-400 focus:ring-offset-2 focus:ring-offset-stone-900 no-underline inline-block disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-stone-700 disabled:bg-stone-900 disabled:text-white/60 disabled:opacity-75" role="button">
+          Generate my recap
+        </a>
       </div>
       <div data-recap-target="progressBlock" class="hidden rounded-lg border border-stone-600 bg-stone-900/50 px-4 py-3 text-sm">
         <div class="flex items-start gap-3">

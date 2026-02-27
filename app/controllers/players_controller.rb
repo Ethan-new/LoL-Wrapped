@@ -4,6 +4,12 @@ class PlayersController < ApplicationController
   skip_before_action :allow_browser, if: -> { request.format.json? }, raise: false
 
   def index
+    @total_matches = Match.count
+    @total_players = Player.count
+    @total_recaps = RecapYearStat.count
+    @error = flash[:lookup_error]
+    @details = flash[:lookup_details]
+    @show_region_hint = flash[:lookup_show_region_hint]
   end
 
   def recap_statuses
@@ -134,7 +140,7 @@ class PlayersController < ApplicationController
 
   def lookup
     unless valid_params?
-      return respond_to_error("Please fix the following", param_errors, :unprocessable_entity)
+      return respond_to_lookup_error("Please fix the following", param_errors, :unprocessable_entity)
     end
 
     normalized = normalized_lookup_params
@@ -149,11 +155,11 @@ class PlayersController < ApplicationController
 
     respond_to_success(player)
   rescue RiotClient::NotFound
-    respond_to_error("Riot account not found", [], :not_found, show_region_hint: true)
+    respond_to_lookup_error("Riot account not found", [], :not_found, show_region_hint: true)
   rescue RiotClient::ApiError, RiotClient::ArgumentError => e
-    respond_to_error(e.message, [], :unprocessable_entity)
+    respond_to_lookup_error(e.message, [], :unprocessable_entity)
   rescue ActiveRecord::RecordInvalid => e
-    respond_to_error("Failed to save player", e.record.errors.full_messages, :unprocessable_entity)
+    respond_to_lookup_error("Failed to save player", e.record.errors.full_messages, :unprocessable_entity)
   end
 
   private
@@ -370,6 +376,24 @@ class PlayersController < ApplicationController
         render :lookup_error,
           locals: { error: message, details: details, show_region_hint: show_region_hint },
           status: status
+      end
+      format.json { render json: { error: message, details: details }, status: status }
+    end
+  end
+
+  def respond_to_lookup_error(message, details, status, show_region_hint: false)
+    respond_to do |format|
+      format.html do
+        if turbo_frame_request?
+          render partial: "lookup_result",
+            locals: { error: message, details: details, show_region_hint: show_region_hint },
+            layout: false,
+            status: status
+        else
+          redirect_to root_path(anchor: "content"),
+            flash: { lookup_error: message, lookup_details: details, lookup_show_region_hint: show_region_hint },
+            status: :see_other
+        end
       end
       format.json { render json: { error: message, details: details }, status: status }
     end

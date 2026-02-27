@@ -3,8 +3,8 @@
 class ComputeMostPlayedWithJob < ApplicationJob
   queue_as :compute
 
-  # Exclude trinket/ward items from top items built
-  EXCLUDED_ITEM_IDS = [ 3340, 3363, 3364, 3341, 3342, 2055 ].freeze # Stealth Ward, Farsight Alteration, Oracle Alteration, Scrying Orb, Sweeping Lens
+  # Exclude trinket/ward items and biscuits from top items built
+  EXCLUDED_ITEM_IDS = [ 3340, 3363, 3364, 3341, 3342, 2055, 2010 ].freeze # Stealth Ward, Farsight Alteration, Oracle Alteration, Scrying Orb, Sweeping Lens, Total Biscuit of Everlasting Will
 
   # Late-scaling champions (championId) - commonly identified as late-game scalers
   LATE_SCALING_CHAMPION_IDS = [ 10, 38, 45, 75, 8, 14, 516, 203, 412, 24, 13, 268, 136, 96, 29, 67, 34, 69, 31 ].freeze # Kayle, Kassadin, Veigar, Nasus, Vladimir, Sion, Ornn, Kindred, Thresh, Jax, Ryze, Azir, AurelionSol, KogMaw, Twitch, Vayne, Anivia, Cassiopeia, ChoGath
@@ -76,6 +76,9 @@ class ComputeMostPlayedWithJob < ApplicationJob
     # Clutch & Chaos
     total_survived_single_digit_hp = 0
     total_objectives_stolen = 0
+    total_dragons_taken = 0
+    total_barons_taken = 0
+    total_turrets_taken = 0
     games_ended_surrender = 0
     wins_in_surrender_games = 0
     # Economy & Scaling
@@ -86,7 +89,7 @@ class ComputeMostPlayedWithJob < ApplicationJob
     wins_after_early_gold_deficit = 0
     games_on_scaling_champs = 0
     # Champion Personality
-    champion_stats = Hash.new { |h, k| h[k] = { games: 0, wins: 0 } }
+    champion_stats = Hash.new { |h, k| h[k] = { games: 0, wins: 0, kills: 0, deaths: 0, assists: 0 } }
     # Vision & Map IQ
     sum_vision_score_per_min = 0.0
     games_with_vision = 0
@@ -107,6 +110,12 @@ class ComputeMostPlayedWithJob < ApplicationJob
     total_team_kills_all_games = 0
     queue_counts = Hash.new(0)
     time_by_queue = Hash.new(0)
+    best_game = nil
+    best_game_score = -1.0
+    worst_game = nil
+    worst_game_score = -1.0
+    match_results_for_streaks = []
+    time_heatmap = Hash.new(0)
 
     matches_by_uid = Match.where(match_uid: match_uids).index_by(&:match_uid)
     match_uids.each do |match_uid|
@@ -145,6 +154,14 @@ class ComputeMostPlayedWithJob < ApplicationJob
       p = player_entry[:participant]
       team_id = (p["teamId"] || p[:teamId]).to_s
       player_won = p["win"] || p[:win] || false
+
+      game_start = match.game_start_at
+      match_results_for_streaks << { ts: game_start, won: player_won } if game_start.present?
+      if game_start.present?
+        wday = game_start.wday
+        hour = game_start.hour
+        time_heatmap["#{wday}_#{hour}"] += 1
+      end
 
       # KDA
       total_kills += (p["kills"] || p[:kills]).to_i
@@ -292,6 +309,9 @@ class ComputeMostPlayedWithJob < ApplicationJob
       champion_id = (p["championId"] || p[:championId] || 0).to_i
       champion_stats[champion_id][:games] += 1
       champion_stats[champion_id][:wins] += 1 if player_won
+      champion_stats[champion_id][:kills] += (p["kills"] || p[:kills]).to_i
+      champion_stats[champion_id][:deaths] += (p["deaths"] || p[:deaths]).to_i
+      champion_stats[champion_id][:assists] += (p["assists"] || p[:assists]).to_i
       games_on_scaling_champs += 1 if champion_id.positive? && LATE_SCALING_CHAMPION_IDS.include?(champion_id)
 
       # Vision & Map IQ
@@ -304,7 +324,10 @@ class ComputeMostPlayedWithJob < ApplicationJob
       control_wards = (p["visionWardsBoughtInGame"] || p[:visionWardsBoughtInGame]).to_i if control_wards.zero? # fallback: control wards bought
       total_control_wards_placed += control_wards
       total_ward_takedowns += (p["wardsKilled"] || p[:wardsKilled] || chal["wardTakedowns"] || chal[:wardTakedowns] || 0).to_i
-      total_turret_plates_taken += (chal["turretPlatesTaken"] || chal[:turretPlatesTaken] || chal["turretTakedowns"] || chal[:turretTakedowns] || 0).to_i
+      total_turret_plates_taken += (chal["turretPlatesTaken"] || chal[:turretPlatesTaken] || 0).to_i
+      total_turrets_taken += (p["turretKills"] || p[:turretKills] || chal["turretTakedowns"] || chal[:turretTakedowns] || 0).to_i
+      total_dragons_taken += (p["dragonKills"] || p[:dragonKills] || chal["dragonKills"] || chal[:dragonKills] || 0).to_i
+      total_barons_taken += (p["baronKills"] || p[:baronKills] || chal["baronKills"] || chal[:baronKills] || 0).to_i
       vs_adv = chal["visionScoreAdvantageLaneOpponent"] || chal[:visionScoreAdvantageLaneOpponent]
       if vs_adv.present?
         sum_vision_score_advantage += vs_adv.to_f
@@ -335,6 +358,34 @@ class ComputeMostPlayedWithJob < ApplicationJob
       our_ka = our_kills + our_assists
       team_kills = our_kills + teammates.sum { |r| (r[:participant]["kills"] || r[:participant][:kills]).to_i }
       total_team_kills_all_games += team_kills
+
+      # Best game (Match MVP): composite score favoring KDA, damage, win
+      deaths_val = (p["deaths"] || p[:deaths]).to_i
+      kda_mult = deaths_val.positive? ? (our_kills + our_assists).to_f / deaths_val : (our_kills + our_assists).to_f
+      mvp_score = kda_mult * 3 + my_damage / 3000.0 + (player_won ? 15 : 0)
+      if mvp_score > best_game_score
+        best_game_score = mvp_score
+        best_game = {
+          "kills" => our_kills,
+          "deaths" => deaths_val,
+          "assists" => our_assists,
+          "damage" => my_damage.round,
+          "durationSeconds" => game_sec_i,
+          "championId" => (p["championId"] || p[:championId]).to_i
+        }
+      end
+
+      # Worst game (funny slide): favor high deaths, low K+A, losses
+      worst_score = deaths_val * 3 - our_kills - our_assists + (player_won ? 0 : 15)
+      if worst_score > worst_game_score
+        worst_game_score = worst_score
+        worst_game = {
+          "kills" => our_kills,
+          "deaths" => deaths_val,
+          "assists" => our_assists,
+          "championId" => (p["championId"] || p[:championId]).to_i
+        }
+      end
       teammates.each do |r|
         t_puuid = r[:puuid]
         next if t_puuid.blank?
@@ -447,12 +498,53 @@ class ComputeMostPlayedWithJob < ApplicationJob
       .select { |_cid, c| c[:games] >= 3 && c[:wins].to_f / c[:games] < 0.5 }
       .max_by { |_cid, c| c[:games] }
 
+    most_played_kda = most_played_data[:games].positive? ? { "kills" => most_played_data[:kills], "deaths" => most_played_data[:deaths], "assists" => most_played_data[:assists] } : nil
     extra_stats["championPersonality"] = {
-      "mostPlayedChampion" => most_played_id.present? ? { "championId" => most_played_id, "games" => most_played_data[:games], "wins" => most_played_data[:wins], "winrate" => most_played_data[:games].positive? ? (100.0 * most_played_data[:wins] / most_played_data[:games]).round(1) : nil } : nil,
+      "mostPlayedChampion" => most_played_id.present? ? { "championId" => most_played_id, "games" => most_played_data[:games], "wins" => most_played_data[:wins], "winrate" => most_played_data[:games].positive? ? (100.0 * most_played_data[:wins] / most_played_data[:games]).round(1) : nil, "kda" => most_played_kda } : nil,
       "highestWinrateChampion" => highest_wr ? { "championId" => highest_wr[0], "games" => highest_wr[1][:games], "wins" => highest_wr[1][:wins], "winrate" => (100.0 * highest_wr[1][:wins] / highest_wr[1][:games]).round(1) } : nil,
       "whyDoYouKeepPickingThis" => why_pick ? { "championId" => why_pick[0], "games" => why_pick[1][:games], "wins" => why_pick[1][:wins], "winrate" => (100.0 * why_pick[1][:wins] / why_pick[1][:games]).round(1) } : nil,
       "oneTrickScore" => (games_count.positive? && most_played_data[:games].positive?) ? (100.0 * most_played_data[:games] / games_count).round(1) : nil
     }
+    extra_stats["gamesCount"] = games_count
+    extra_stats["uniqueChampionsPlayed"] = champion_stats.size
+    top_champions = sorted_by_games.first(6).map do |cid, c|
+      wr = c[:games].positive? ? (100.0 * c[:wins] / c[:games]).round(1) : nil
+      { "championId" => cid, "games" => c[:games], "wins" => c[:wins], "winrate" => wr }
+    end
+    extra_stats["topChampions"] = top_champions if top_champions.any?
+    extra_stats["bestGame"] = best_game if best_game.present?
+    extra_stats["worstGame"] = worst_game if worst_game.present?
+
+    # Winrate Insights: best and worst champion winrate (min 5 games)
+    low_wr = champion_stats
+      .select { |cid, c| c[:games] >= min_games_for_winrate && cid != highest_wr&.first }
+      .min_by { |_cid, c| c[:games] > 0 ? (100.0 * c[:wins] / c[:games]) : 100 }
+    extra_stats["winrateInsights"] = {
+      "bestChampion" => highest_wr ? { "championId" => highest_wr[0], "games" => highest_wr[1][:games], "wins" => highest_wr[1][:wins], "winrate" => (100.0 * highest_wr[1][:wins] / highest_wr[1][:games]).round(1) } : nil,
+      "worstChampion" => low_wr ? { "championId" => low_wr[0], "games" => low_wr[1][:games], "wins" => low_wr[1][:wins], "winrate" => (100.0 * low_wr[1][:wins] / low_wr[1][:games]).round(1) } : nil
+    }
+
+    # Streaks: longest win streak, longest loss streak (chronological order)
+    sorted_results = match_results_for_streaks.sort_by { |r| r[:ts] }
+    longest_win = 0
+    longest_loss = 0
+    current_win = 0
+    current_loss = 0
+    sorted_results.each do |r|
+      if r[:won]
+        current_win += 1
+        current_loss = 0
+        longest_win = [ longest_win, current_win ].max
+      else
+        current_loss += 1
+        current_win = 0
+        longest_loss = [ longest_loss, current_loss ].max
+      end
+    end
+    extra_stats["streaks"] = { "longestWinStreak" => longest_win, "longestLossStreak" => longest_loss } if longest_win.positive? || longest_loss.positive?
+
+    # Time Played: heatmap day x hour
+    extra_stats["timePlayedHeatmap"] = time_heatmap if time_heatmap.any?
 
     # Vision & Map IQ
     enemy_missing_pings = (ping_breakdown["enemyMissingPings"] || ping_breakdown[:enemyMissingPings] || 0).to_i
@@ -552,6 +644,103 @@ class ComputeMostPlayedWithJob < ApplicationJob
     meme_titles << "Main Character Syndrome" if max_team_damage_pct >= 35 && kp_overall < 50
     meme_titles << "Vision Ward Addict" if vision_per_min >= 2.0
     extra_stats["memeTitles"] = meme_titles
+
+    # MVP Insight: pick ONE archetype (Playmaker, Carry, Farmer, Specialist, Objective Player, Teamfighter, Aggressive, Consistent)
+    total_wins = champion_stats.values.sum { |c| c[:wins] }
+    winrate = games_count.positive? ? (100.0 * total_wins / games_count) : 0
+    kp = total_team_kills_all_games.positive? ? (100.0 * (total_kills + total_assists) / total_team_kills_all_games) : 0
+    pi = extra_stats["playstyleIdentity"] || {}
+    mce = pi["mainCharacterEnergy"] || {}
+    ggi = pi["goldGoblinIndex"] || {}
+    rts = pi["riskToleranceScore"] || {}
+    egd = pi["earlyGameDemon"] || {}
+    cc = extra_stats["clutchChaosMoments"] || {}
+    obj_thief = (cc.dig("objectiveThiefPotential", "objectivesStolenPlusAssists") || 0).to_i
+    fb_pct = (cc.dig("firstBloodMagnet", "firstBloodInvolvementPercent") || 0).to_f
+    cp = extra_stats["championPersonality"] || {}
+    one_trick = (cp["oneTrickScore"] || 0).to_f
+    vm = extra_stats["visionMapIq"] || {}
+    vision_per_min = (vm["visionScorePerMinAvg"] || 0).to_f
+    control_wards_pg = games_count.positive? ? (total_control_wards_placed.to_f / games_count) : 0
+    avg_cs = (extra_stats["avgCsPerMin"] || 0).to_f
+    avg_deaths = (rts["avgDeaths"] || 0).to_f
+    games_most_dmg_pct = (mce["gamesMostDamagePercent"] || 0).to_f
+    highest_dmg_pct = (mce["highestTeamDamagePercentage"] || 0).to_f
+    gold_top_pct = (ggi["gamesTopGoldPercent"] || 0).to_f
+    plates_pg = games_count.positive? ? (total_turret_plates_taken.to_f / games_count) : 0
+    avg_takedowns_early = games_with_early_stats.positive? ? (sum_takedowns_first_x / games_with_early_stats) : 0
+    scuttle = (extra_stats["scuttleCrabKills"] || 0).to_f
+    buffs = (extra_stats["buffsStolen"] || 0).to_f
+    save_ally = (extra_stats["saveAllyFromDeath"] || 0).to_f
+    assists_pg = games_count.positive? ? (total_assists.to_f / games_count) : 0
+    kills_pg = games_count.positive? ? (total_kills.to_f / games_count) : 0
+    ratio_a_to_k = kills_pg.positive? ? (total_assists.to_f / total_kills) : 0
+    unique_champs = champion_stats.size
+
+    mvp_scores = {
+      "Playmaker" => (ratio_a_to_k >= 1.5 ? 30 : ratio_a_to_k * 15) + [ kp / 2, 30 ].min + [ save_ally * 3, 20 ].min,
+      "Carry" => games_most_dmg_pct * 1.2 + highest_dmg_pct * 0.5,
+      "Farmer" => [ avg_cs * 6, 50 ].min + gold_top_pct * 0.4 + plates_pg * 4,
+      "Specialist" => one_trick * 0.7 + [ 50 - unique_champs, 0 ].max * 0.3,
+      "Objective Player" => (games_count.positive? ? (total_dragons_taken.to_f / games_count * 8 + total_barons_taken.to_f / games_count * 25 + total_turrets_taken.to_f / games_count * 5) : 0) + control_wards_pg * 1.5 + vision_per_min * 3,
+      "Teamfighter" => (games_most_dmg_pct * 0.5 + kp * 0.4) + [ assists_pg * 2, 25 ].min,
+      "Aggressive" => fb_pct * 1.2 + avg_takedowns_early * 6,
+      "Consistent" => (winrate >= 48 && winrate <= 55 ? 25 : 0) + (avg_deaths >= 3 && avg_deaths <= 7 ? 20 : 0) + (fb_pct < 20 ? 15 : 0)
+    }
+    top_archetype = mvp_scores.max_by { |_, v| v }
+    if top_archetype && top_archetype[1] >= 15
+      archetype_name = top_archetype[0]
+      mvp_stats = case archetype_name
+      when "Playmaker"
+        s = []
+        s << { "label" => "Kill participation", "value" => "#{kp.round(1)}%" } if kp > 0
+        s << { "label" => "Assists per kill", "value" => ratio_a_to_k.round(1).to_s } if kills_pg.positive?
+        s << { "label" => "Allies saved from death", "value" => save_ally.to_i.to_s } if save_ally > 0
+        s
+      when "Carry"
+        [
+          (games_most_dmg_pct > 0 ? { "label" => "Games most damage on team", "value" => "#{games_most_dmg_pct.round(1)}%" } : nil),
+          (highest_dmg_pct > 0 ? { "label" => "Peak team damage share", "value" => "#{highest_dmg_pct.round(1)}%" } : nil)
+        ].compact
+      when "Farmer"
+        s = []
+        s << { "label" => "CS per minute", "value" => avg_cs.round(1).to_s } if avg_cs > 0
+        s << { "label" => "Games top gold on team", "value" => "#{gold_top_pct.round(1)}%" } if gold_top_pct > 0
+        s << { "label" => "Turret plates per game", "value" => plates_pg.round(1).to_s } if plates_pg > 0
+        s
+      when "Specialist"
+        s = []
+        s << { "label" => "Most played champ share", "value" => "#{one_trick.round(1)}%" } if one_trick > 0
+        s << { "label" => "Champions played", "value" => unique_champs.to_s } if unique_champs > 0
+        s
+      when "Objective Player"
+        [
+          { "label" => "Dragons taken", "value" => total_dragons_taken.to_s },
+          { "label" => "Barons taken", "value" => total_barons_taken.to_s },
+          { "label" => "Turrets taken", "value" => total_turrets_taken.to_s }
+        ]
+      when "Teamfighter"
+        s = []
+        s << { "label" => "Kill participation", "value" => "#{kp.round(1)}%" } if kp > 0
+        s << { "label" => "Assists per game", "value" => assists_pg.round(1).to_s } if assists_pg > 0
+        s << { "label" => "Games most damage", "value" => "#{games_most_dmg_pct.round(1)}%" } if games_most_dmg_pct > 0
+        s
+      when "Aggressive"
+        s = []
+        s << { "label" => "First blood involvement", "value" => "#{fb_pct.round(1)}%" } if fb_pct > 0
+        s << { "label" => "Early takedowns (first 10 min)", "value" => avg_takedowns_early.round(1).to_s } if games_with_early_stats.positive?
+        s
+      when "Consistent"
+        s = []
+        s << { "label" => "Win rate", "value" => "#{winrate.round(1)}%" } if games_count.positive?
+        s << { "label" => "Deaths per game", "value" => avg_deaths.round(1).to_s } if avg_deaths > 0
+        s << { "label" => "First blood rate", "value" => "#{fb_pct.round(1)}%" } if fb_pct >= 0
+        s
+      else
+        []
+      end
+      extra_stats["mvpInsight"] = { "archetype" => archetype_name, "stats" => mvp_stats }
+    end
 
     most_played_with = top_teammates.map do |teammate_puuid, counts|
       riot_id = riot_ids_by_puuid[teammate_puuid]

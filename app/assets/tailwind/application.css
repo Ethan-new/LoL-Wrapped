@@ -1,1 +1,21 @@
 @import "tailwindcss";
+
+@font-face {
+  font-family: "Beaufort for LOL";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/BeaufortforLOL-Regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Beaufort for LOL";
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("/fonts/BeaufortforLOL-Heavy.ttf") format("truetype");
+}
+
+@theme {
+  --font-beaufort: "Beaufort for LOL", ui-sans-serif, system-ui, sans-serif;
+}

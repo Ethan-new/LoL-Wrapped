@@ -1,16 +1,50 @@
 <% content_for :title, "LoL Wrapped - Player Lookup" %>
 
-<div class="flex w-full max-w-2xl flex-col items-center">
-  <header class="text-center">
-    <h1 class="text-4xl font-bold tracking-tight text-white">
-      LoL Wrapped
-    </h1>
-    <p class="mt-2 text-lg text-zinc-400">
-      Search your game name to get your <%= Time.current.year - 1 %> wrapped
-    </p>
-  </header>
+<div class="flex w-full flex-col">
+  <section class="relative flex h-screen w-full shrink-0 flex-col items-center overflow-hidden" data-controller="hero-video">
+    <video data-hero-video-target="video" src="/videos/Herovideo1.mp4" autoplay muted loop playsinline class="absolute inset-0 h-full w-full object-cover"></video>
+    <div class="absolute inset-0 bg-black/50" aria-hidden="true"></div>
+    <div class="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black to-transparent" aria-hidden="true"></div>
+    <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black to-transparent" aria-hidden="true"></div>
+    <h1 class="relative z-10 mt-4 text-2xl font-semibold uppercase tracking-[0.25em] text-white/95 drop-shadow-[0_0_30px_rgba(0,0,0,0.6)] sm:text-3xl md:text-4xl">LoL Wrapped</h1>
+    <a href="#content" class="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 flex items-center justify-center text-white/70 transition-colors hover:text-white/90" aria-label="Scroll to content">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6 animate-bounce">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </a>
+    <button type="button" class="absolute bottom-5 right-5 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white transition-colors hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-white/50" data-action="click->hero-video#toggle" aria-label="Pause video">
+      <svg data-hero-video-target="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5">
+        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+      </svg>
+    </button>
+  </section>
 
-  <div class="w-full">
-    <%= render "lookup_result" %>
+  <section id="content" class="flex min-h-screen w-full flex-col items-center justify-center bg-black px-2.5 py-6">
+  <div class="flex w-full max-w-2xl flex-col items-center">
+    <header class="text-center">
+
+      <p class="mt-2 text-xl text-white">
+        Search your game name to get your <%= Time.current.year - 1 %> wrapped
+      </p>
+    </header>
+
+    <div class="w-full">
+      <%= render "lookup_result", error: @error, details: @details, show_region_hint: @show_region_hint %>
+    </div>
+    <div class="flex w-full flex-wrap justify-center gap-8 gap-y-4 text-center" data-controller="counter">
+      <div>
+        <p data-counter-target="number" data-counter-value="<%= @total_matches %>" class="text-2xl font-bold tabular-nums text-white">0</p>
+        <p class="text-sm text-zinc-500">Matches stored</p>
+      </div>
+      <div>
+        <p data-counter-target="number" data-counter-value="<%= @total_players %>" class="text-2xl font-bold tabular-nums text-blue-400">0</p>
+        <p class="text-sm text-zinc-500">Summoners stored</p>
+      </div>
+      <div>
+        <p data-counter-target="number" data-counter-value="<%= @total_recaps %>" class="text-2xl font-bold tabular-nums text-emerald-400">0</p>
+        <p class="text-sm text-zinc-500">Recaps generated</p>
+      </div>
+    </div>
   </div>
+  </section>
 </div>

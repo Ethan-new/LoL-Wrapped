@@ -3,10 +3,11 @@ import { Controller } from "@hotwired/stimulus"
 // Carousel controller for Spotify Wrapped-style cards.
 // Handles keyboard navigation and progress dots (swipe/scroll for cards).
 export default class extends Controller {
-  static targets = ["scrollContainer", "dots"]
+  static targets = ["scrollContainer", "dots", "prevButton", "nextButton"]
 
   connect() {
     this.updateDots()
+    this.updateArrows()
     this.scrollContainerTarget.addEventListener("scroll", () => this.onScroll())
     document.addEventListener("keydown", this.boundKeydown = (e) => this.onKeydown(e))
   }
@@ -17,6 +18,15 @@ export default class extends Controller {
 
   onScroll() {
     this.updateDots()
+    this.updateArrows()
+  }
+
+  updateArrows() {
+    if (!this.hasPrevButtonTarget || !this.hasNextButtonTarget) return
+    const cards = this.cards
+    const idx = this.currentIndex
+    this.prevButtonTarget.disabled = cards.length <= 1 || idx <= 0
+    this.nextButtonTarget.disabled = cards.length <= 1 || idx >= cards.length - 1
   }
 
   onKeydown(e) {
@@ -42,10 +52,7 @@ export default class extends Controller {
     if (cards.length === 0 || index < 0 || index >= cards.length) return
 
     const card = cards[index]
-    this.scrollContainerTarget.scrollTo({
-      left: card.offsetLeft,
-      behavior: "smooth"
-    })
+    card.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })
   }
 
   get cards() {
@@ -61,13 +68,20 @@ export default class extends Controller {
 
     const scrollLeft = this.scrollContainerTarget.scrollLeft
     const containerWidth = this.scrollContainerTarget.offsetWidth
+    const viewportCenter = scrollLeft + containerWidth / 2
 
+    let closestIdx = 0
+    let closestDist = Infinity
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i]
-      const cardCenter = card.offsetLeft + card.offsetWidth / 2 - containerWidth / 2
-      if (scrollLeft <= cardCenter + 10) return i
+      const cardCenter = card.offsetLeft + card.offsetWidth / 2
+      const dist = Math.abs(viewportCenter - cardCenter)
+      if (dist < closestDist) {
+        closestDist = dist
+        closestIdx = i
+      }
     }
-    return cards.length - 1
+    return closestIdx
   }
 
   updateDots() {
@@ -92,5 +106,6 @@ export default class extends Controller {
   // Called by recap controller after injecting cards (or when cards change)
   refresh() {
     this.updateDots()
+    this.updateArrows()
   }
 }
