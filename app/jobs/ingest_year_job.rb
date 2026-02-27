@@ -63,7 +63,9 @@ class IngestYearJob < ApplicationJob
         end
 
         processed_so_far = start_idx + idx + 1
-        progress.set_progress(player_id, year, downloaded: match_uids_for_year.size, processed: processed_so_far) if processed_so_far % PROGRESS_UPDATE_INTERVAL == 0 || processed_so_far == 1
+        # Update often at start (every 1 for first 10), then every 5
+        interval = processed_so_far <= 10 ? 1 : PROGRESS_UPDATE_INTERVAL
+        progress.set_progress(player_id, year, downloaded: match_uids_for_year.size, processed: processed_so_far) if processed_so_far % interval == 0 || processed_so_far == 1
 
         if game_start >= end_time
           next # too new, skip

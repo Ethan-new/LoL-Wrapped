@@ -248,9 +248,14 @@ export default class extends Controller {
         lines.push("Waiting in queue…")
       }
       if (processed != null && processed >= 0) {
-        lines.push(`Processed ${processed} matches…`)
+        const dl = downloaded != null && downloaded >= 0 ? downloaded : 0
+        if (dl > 0) {
+          lines.push(`Processed ${processed} matches, ${dl} from ${recapYear()}…`)
+        } else {
+          lines.push(`Processed ${processed} matches (scanning for ${recapYear()})…`)
+        }
       } else if (downloaded != null && downloaded >= 0) {
-        lines.push(`Downloaded ${downloaded} matches…`)
+        lines.push(downloaded === 0 ? `Scanning your match history for ${recapYear()}…` : `Downloaded ${downloaded} matches…`)
       }
       if (lines.length === 0) {
         lines.push(`Contacting Riot to get all your games from ${recapYear()}…`)
@@ -292,9 +297,10 @@ export default class extends Controller {
         parts.push(queuePosition === 1 ? "You're next!" : `Position in queue: ${queuePosition}`)
       }
       if (processed != null && processed >= 0) {
-        parts.push(`Processed ${processed} matches…`)
+        const dl = downloaded != null && downloaded >= 0 ? downloaded : 0
+        parts.push(dl > 0 ? `Processed ${processed} matches, ${dl} from ${recapYear()}` : `Processed ${processed} matches (scanning for ${recapYear()})`)
       } else if (downloaded != null && downloaded >= 0) {
-        parts.push(`Downloaded ${downloaded} matches…`)
+        parts.push(downloaded === 0 ? `Scanning for ${recapYear()}…` : `Downloaded ${downloaded} matches`)
       }
       if (parts.length > 0) return parts.join(" • ")
       return `Contacting Riot to get all your games from ${recapYear()}…`
