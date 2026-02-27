@@ -153,6 +153,15 @@ class PlayersController < ApplicationController
       player = find_or_create_player(account_data)
     end
 
+    # Instantly refresh profile when data is stale (never synced or older than 1 hour)
+    if player && (player.last_synced_at.nil? || player.last_synced_at < 1.hour.ago)
+      begin
+        refresh_player_data(player)
+      rescue RiotClient::NotFound, RiotClient::ApiError
+        # Continue with cached data if refresh fails (e.g. API down, rate limit)
+      end
+    end
+
     respond_to_success(player)
   rescue RiotClient::NotFound
     respond_to_lookup_error("Riot account not found", [], :not_found, show_region_hint: true)
@@ -257,6 +266,7 @@ class PlayersController < ApplicationController
         player.revision_date = summoner_data[:revisionDate]
       end
       player.rank_entries = rank_entries
+      player.last_synced_at = Time.current # Fresh data from Riot; skip redundant refresh on same request
       player.save!
     end
   end
