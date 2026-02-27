@@ -259,6 +259,21 @@ docker compose -f docker-compose.prod.yml logs sidekiq_ingest sidekiq_compute
 docker compose -f docker-compose.prod.yml logs postgres
 ```
 
+**Reset production database**
+
+⚠️ **Warning:** This drops all data. Stop app containers first (they hold DB connections).
+
+```bash
+# 1. Stop containers that use the database
+docker compose -f docker-compose.prod.yml stop web sidekiq_ingest sidekiq_compute
+
+# 2. Reset database (drop, create, migrate, load seeds)
+docker compose -f docker-compose.prod.yml run --rm -e DISABLE_DATABASE_ENVIRONMENT_CHECK=1 web bin/rails db:reset
+
+# 3. Start everything again
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+```
+
 **Rogue Sidekiq process taking jobs**
 
 If an old Sidekiq process appears in the dashboard and is taking incoming jobs, stop it so only the intended workers (tagged "ingest" and "compute") handle work.
@@ -276,3 +291,36 @@ If an old Sidekiq process appears in the dashboard and is taking incoming jobs, 
    ps aux | grep sidekiq
    kill -TERM <pid>
    ```
+
+**Full deployment reset**
+
+If the rogue Sidekiq process still appears after the steps above, do a complete reset. This stops everything, flushes Redis (clearing Sidekiq process registry, queues, and locks), and starts fresh.
+
+⚠️ **Warning:** Flushing Redis will remove pending Sidekiq jobs, retries, dead jobs, ingest locks, and rate-limit state. In-progress recaps will need to be restarted.
+
+SSH into your server and run:
+
+```bash
+cd ~/LoL-Wrapped   # or wherever the app lives
+
+# 1. Stop and remove ALL containers from this compose project
+docker compose -f docker-compose.prod.yml down
+
+# 2. Find any orphaned Sidekiq containers (e.g. ecec03739883 from the dashboard)
+docker ps -a | grep -E "sidekiq|ecec03739883"
+
+# 3. Stop and remove the rogue container by ID if you found one
+#    (Replace CONTAINER_ID with the actual ID from step 2)
+# docker stop CONTAINER_ID && docker rm CONTAINER_ID
+
+# 4. Flush Redis to clear Sidekiq's process registry and queues
+docker compose -f docker-compose.prod.yml run --rm redis redis-cli FLUSHDB
+
+# 5. Start everything fresh
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+
+# 6. Verify only two Sidekiq containers run (ingest + compute)
+docker compose -f docker-compose.prod.yml ps
+```
+
+After step 5, the app starts with a clean Redis. The rogue process `ecec03739883` will vanish from the Sidekiq dashboard because its Redis entry is gone. If it was a real container, it's now stopped by `down`; if it was from another project, run `docker ps -a` and stop it manually with `docker stop <id>`.
