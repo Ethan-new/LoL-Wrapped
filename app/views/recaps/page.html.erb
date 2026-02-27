@@ -1,6 +1,6 @@
 <% content_for :title, "#{@player.riot_id} - #{@year} LoL Wrapped" %>
 
-<div class="fixed inset-0 flex flex-col bg-stone-950" data-controller="recap" data-recap-recap-url-value="<%= player_recap_url(@player, @year) %>" data-recap-autoload-value="true" data-recap-back-url-value="<%= @player_path %>" data-recap-player-riot-id-value="<%= @player.riot_id %>" data-recap-profile-icon-url-value="<%= @player.profile_icon_url %>">
+<div class="fixed inset-0 flex flex-col bg-stone-950" data-controller="recap" data-recap-recap-url-value="<%= player_recap_path(@player, @year) %>" data-recap-autoload-value="true" data-recap-back-url-value="<%= @player_path %>" data-recap-player-riot-id-value="<%= @player.riot_id %>" data-recap-profile-icon-url-value="<%= @player.profile_icon_url %>">
   <div data-recap-target="wrappedModal" class="relative z-10 flex flex-1 flex-col min-h-0">
     <div class="flex shrink-0 items-center justify-between px-4 py-3 border-b border-stone-700">
       <%= link_to "← Back to profile", @player_path, class: "text-sm font-medium text-white transition-colors hover:text-stone-300 focus:outline-none focus:ring-2 focus:ring-stone-400 rounded px-1 -mx-1" %>
