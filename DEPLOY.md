@@ -258,3 +258,21 @@ docker compose -f docker-compose.prod.yml logs web
 docker compose -f docker-compose.prod.yml logs sidekiq_ingest sidekiq_compute
 docker compose -f docker-compose.prod.yml logs postgres
 ```
+
+**Rogue Sidekiq process taking jobs**
+
+If an old Sidekiq process appears in the dashboard and is taking incoming jobs, stop it so only the intended workers (tagged "ingest" and "compute") handle work.
+
+1. **From the Sidekiq Web UI** – Go to Busy → Processes. Find the rogue process (e.g. no tag, or "rails" instead of "ingest"/"compute") and click **Quiet Stop**. That tells it to stop accepting new jobs and shut down.
+
+2. **From the server** – SSH in and force-recreate the Sidekiq containers so only the intended ones run:
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --force-recreate sidekiq_ingest sidekiq_compute
+   ```
+   This stops the old containers (SIGTERM, 60s grace) and starts fresh ones. Old process entries in Redis expire within ~30 seconds.
+
+3. **If the rogue process is not a container** – e.g. you ran `bundle exec sidekiq` manually, find and kill it:
+   ```bash
+   ps aux | grep sidekiq
+   kill -TERM <pid>
+   ```
