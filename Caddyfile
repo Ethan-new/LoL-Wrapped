@@ -1,9 +1,6 @@
-# IP-only access (no domain): serves HTTP on port 80
-# Access via http://YOUR_SERVER_IP
-#
-# With a domain: replace :80 with your domain (e.g. lol-wrapped.example.com)
-# Then add a DNS A record pointing to your server IP for HTTPS.
+# wrappedlol.com – Caddy handles HTTPS automatically via Let's Encrypt
+# DNS: Add A records for @ and www pointing to your droplet IP
 
-:80 {
+wrappedlol.com www.wrappedlol.com {
     reverse_proxy web:3000
 }
