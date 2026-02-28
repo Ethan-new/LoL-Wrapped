@@ -2,6 +2,8 @@
 
 A League of Legends year-in-review (Wrapped) application.
 
+**Live**: [wrappedlol.com](https://wrappedlol.com)
+
 ## Tech Stack
 
 - **Rails 8.1** + Ruby 3.4.5
@@ -63,9 +65,36 @@ bin/rails tailwindcss:watch
 
 ## Environment variables
 
-| Variable       | Default                    | Description                                               |
-| -------------- | -------------------------- | --------------------------------------------------------- |
-| `RIOT_API_KEY` | —                          | Riot API key (required for player lookup and ingestion)   |
-| `REDIS_URL`    | `redis://localhost:6379/0` | Redis connection (required for Sidekiq and rate limiting) |
-| `PGHOST`       | `localhost`                | Postgres host                                             |
-| `PGPORT`       | `5432`                     | Postgres port                                             |
+### Development
+
+Copy `.env.example` to `.env` and fill in values:
+
+| Variable           | Default                    | Description                                                              |
+| ------------------ | -------------------------- | ------------------------------------------------------------------------ |
+| `RIOT_API_KEY`     | —                          | **Required.** Riot API key from [developer.riotgames.com](https://developer.riotgames.com/) |
+| `REDIS_URL`        | `redis://localhost:6379/0` | Redis connection (Sidekiq, rate limiting)                                |
+| `PGHOST`           | `localhost`                | Postgres host                                                            |
+| `PGPORT`           | `5432`                     | Postgres port                                                            |
+| `RIOT_MATCH_DELAY` | `1.09`                     | Seconds between match-detail API calls. Increase if rate limited.         |
+
+### Production
+
+Copy `.env.production.example` to `.env` on your server. See [DEPLOY.md](DEPLOY.md) for full deployment steps.
+
+| Variable                 | Required | Description                                                         |
+| ------------------------ | -------- | ------------------------------------------------------------------- |
+| `RAILS_MASTER_KEY`       | Yes      | From `config/master.key` (or `bin/rails credentials:show`)         |
+| `APP_DATABASE_PASSWORD`  | Yes      | Secure password for Postgres                                        |
+| `RIOT_API_KEY`           | Yes      | Riot API key from [developer.riotgames.com](https://developer.riotgames.com/) |
+| `ALLOWED_HOSTS`          | No       | Comma-separated hosts to prevent DNS rebinding (e.g. `wrappedlol.com,www.wrappedlol.com`) |
+| `FORCE_SSL`              | No       | Set to `true` for HTTPS redirects when using a domain                |
+| `SIDEKIQ_USER`           | No       | HTTP Basic Auth username for `/sidekiq` (set with `SIDEKIQ_PASSWORD`) |
+| `SIDEKIQ_PASSWORD`       | No       | HTTP Basic Auth password for `/sidekiq`                              |
+
+## Deployment
+
+Production deploys to a Docker droplet with Caddy (HTTPS via Let's Encrypt), Postgres, Redis, and Sidekiq. See **[DEPLOY.md](DEPLOY.md)** for:
+
+- Server setup (Ubuntu, Docker)
+- Domain configuration (wrappedlol.com)
+- Auto-deploy from GitHub Actions
