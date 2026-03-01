@@ -86,5 +86,7 @@ jobs:
             cd ~/LoL-Wrapped
             git pull origin main
             docker compose -f docker-compose.prod.yml --env-file .env build web sidekiq_ingest sidekiq_compute
+            docker compose -f docker-compose.prod.yml stop web sidekiq_ingest sidekiq_compute || true
+            docker compose -f docker-compose.prod.yml rm -f web sidekiq_ingest sidekiq_compute || true
             docker compose -f docker-compose.prod.yml --env-file .env up -d
 
