@@ -9,14 +9,10 @@ class ComputeMostPlayedWithJob < ApplicationJob
   # Late-scaling champions (championId) - commonly identified as late-game scalers
   LATE_SCALING_CHAMPION_IDS = [ 10, 38, 45, 75, 8, 14, 516, 203, 412, 24, 13, 268, 136, 96, 29, 67, 34, 69, 31 ].freeze # Kayle, Kassadin, Veigar, Nasus, Vladimir, Sion, Ornn, Kindred, Thresh, Jax, Ryze, Azir, AurelionSol, KogMaw, Twitch, Vayne, Anivia, Cassiopeia, ChoGath
 
-  # Riot API: timeCCingOthers, totalTimeCCDealt at participant root; rest in challenges
-  EXTRA_STAT_KEYS = %w[
-    skillshotsHit skillshotsDodged outnumberedKills soloKills
-    saveAllyFromDeath timeCCingOthers totalTimeCCDealt
-    scuttleCrabKills buffsStolen
-  ].freeze
+  # Only saveAllyFromDeath is used (for MVP Insight). Others removed from display.
+  EXTRA_STAT_KEYS = %w[ saveAllyFromDeath ].freeze
 
-  # queueId -> category for "most popular queue type" card
+  # queueId -> category for queue distribution
   QUEUE_TO_CATEGORY = {
     420 => "ranked_solo",
     440 => "ranked_flex",
@@ -56,7 +52,10 @@ class ComputeMostPlayedWithJob < ApplicationJob
     total_kills = 0
     total_deaths = 0
     total_assists = 0
-    total_last_hits = 0
+    total_double_kills = 0
+    total_triple_kills = 0
+    total_quadra_kills = 0
+    total_penta_kills = 0
     sum_cs_per_min = 0.0
     games_for_cs = 0
     # Playstyle Identity
@@ -89,7 +88,9 @@ class ComputeMostPlayedWithJob < ApplicationJob
     wins_after_early_gold_deficit = 0
     games_on_scaling_champs = 0
     # Champion Personality
-    champion_stats = Hash.new { |h, k| h[k] = { games: 0, wins: 0, kills: 0, deaths: 0, assists: 0 } }
+    champion_stats = Hash.new do |h, k|
+      h[k] = { games: 0, wins: 0, kills: 0, deaths: 0, assists: 0, double_kills: 0, triple_kills: 0, quadra_kills: 0, penta_kills: 0 }
+    end
     # Vision & Map IQ
     sum_vision_score_per_min = 0.0
     games_with_vision = 0
@@ -168,11 +169,16 @@ class ComputeMostPlayedWithJob < ApplicationJob
       total_deaths += (p["deaths"] || p[:deaths]).to_i
       total_assists += (p["assists"] || p[:assists]).to_i
 
+      # Multi-kills
+      total_double_kills += (p["doubleKills"] || p[:doubleKills]).to_i
+      total_triple_kills += (p["tripleKills"] || p[:tripleKills]).to_i
+      total_quadra_kills += (p["quadraKills"] || p[:quadraKills]).to_i
+      total_penta_kills += (p["pentaKills"] || p[:pentaKills]).to_i
+
       # Last hits (lane + jungle minions)
       total_minions = (p["totalMinionsKilled"] || p[:totalMinionsKilled] || 0).to_i
       total_neutral = (p["neutralMinionsKilled"] || p[:neutralMinionsKilled] || 0).to_i
       game_last_hits = total_minions + total_neutral
-      total_last_hits += game_last_hits
 
       # CS per minute and gold per min (per game, then we average)
       duration_mins = game_sec.to_f / 60.0
@@ -312,6 +318,10 @@ class ComputeMostPlayedWithJob < ApplicationJob
       champion_stats[champion_id][:kills] += (p["kills"] || p[:kills]).to_i
       champion_stats[champion_id][:deaths] += (p["deaths"] || p[:deaths]).to_i
       champion_stats[champion_id][:assists] += (p["assists"] || p[:assists]).to_i
+      champion_stats[champion_id][:double_kills] += (p["doubleKills"] || p[:doubleKills]).to_i
+      champion_stats[champion_id][:triple_kills] += (p["tripleKills"] || p[:tripleKills]).to_i
+      champion_stats[champion_id][:quadra_kills] += (p["quadraKills"] || p[:quadraKills]).to_i
+      champion_stats[champion_id][:penta_kills] += (p["pentaKills"] || p[:pentaKills]).to_i
       games_on_scaling_champs += 1 if champion_id.positive? && LATE_SCALING_CHAMPION_IDS.include?(champion_id)
 
       # Vision & Map IQ
@@ -411,10 +421,9 @@ class ComputeMostPlayedWithJob < ApplicationJob
       end
     end
 
-    extra_stats["totalLastHits"] = total_last_hits
     extra_stats["avgCsPerMin"] = games_for_cs.positive? ? (sum_cs_per_min / games_for_cs).round(1) : nil
 
-    # Playstyle Identity
+    # Playstyle Identity (used for MVP Insight computation)
     extra_stats["playstyleIdentity"] = {
       "mainCharacterEnergy" => {
         "highestTeamDamagePercentage" => games_count.positive? ? max_team_damage_pct.round(1) : nil,
@@ -440,14 +449,13 @@ class ComputeMostPlayedWithJob < ApplicationJob
       }
     }
 
-    # Clutch & Chaos Moments
-    outnumbered_kills_total = (extra_stats["outnumberedKills"] || extra_stats[:outnumberedKills] || 0).to_i
+    # Clutch & Chaos Moments (used for MVP Insight computation)
     extra_stats["clutchChaosMoments"] = {
       "oneHpSurvivor" => {
         "survivedSingleDigitHpCount" => total_survived_single_digit_hp
       },
       "outnumberedFighter" => {
-        "outnumberedKills" => outnumbered_kills_total
+        "outnumberedKills" => 0
       },
       "objectiveThiefPotential" => {
         "objectivesStolenPlusAssists" => total_objectives_stolen
@@ -543,6 +551,29 @@ class ComputeMostPlayedWithJob < ApplicationJob
     end
     extra_stats["streaks"] = { "longestWinStreak" => longest_win, "longestLossStreak" => longest_loss } if longest_win.positive? || longest_loss.positive?
 
+    # Multi-kills
+    if total_double_kills.positive? || total_triple_kills.positive? || total_quadra_kills.positive? || total_penta_kills.positive?
+      by_champion = champion_stats
+        .select { |_cid, c| (c[:double_kills] + c[:triple_kills] + c[:quadra_kills] + c[:penta_kills]).positive? }
+        .map do |cid, c|
+          {
+            "championId" => cid,
+            "doubleKills" => c[:double_kills],
+            "tripleKills" => c[:triple_kills],
+            "quadraKills" => c[:quadra_kills],
+            "pentaKills" => c[:penta_kills]
+          }
+        end
+        .sort_by { |e| -(e["doubleKills"] + e["tripleKills"] * 2 + e["quadraKills"] * 3 + e["pentaKills"] * 4) }
+      extra_stats["multiKills"] = {
+        "doubleKills" => total_double_kills,
+        "tripleKills" => total_triple_kills,
+        "quadraKills" => total_quadra_kills,
+        "pentaKills" => total_penta_kills,
+        "byChampion" => by_champion
+      }
+    end
+
     # Time Played: heatmap day x hour
     extra_stats["timePlayedHeatmap"] = time_heatmap if time_heatmap.any?
 
@@ -633,18 +664,6 @@ class ComputeMostPlayedWithJob < ApplicationJob
     time_dist = time_by_queue.reject { |_, v| v.to_i <= 0 }
     extra_stats["timeByQueue"] = time_dist if time_dist.any?
 
-    # Meme Titles (earned based on stat thresholds)
-    surrender_pct = games_count.positive? ? (100.0 * games_ended_surrender / games_count) : 0
-    vision_per_min = games_with_vision.positive? ? (sum_vision_score_per_min / games_with_vision) : 0
-    kp_overall = total_team_kills_all_games.positive? ? (100.0 * (total_kills + total_assists) / total_team_kills_all_games) : 100
-    meme_titles = []
-    meme_titles << "Plate Thief" if total_turret_plates_taken >= 50
-    meme_titles << "Early FF Enjoyer" if surrender_pct >= 30
-    meme_titles << "Solo Queue Therapist" if total_assists > total_kills * 2 && total_assists > 500
-    meme_titles << "Main Character Syndrome" if max_team_damage_pct >= 35 && kp_overall < 50
-    meme_titles << "Vision Ward Addict" if vision_per_min >= 2.0
-    extra_stats["memeTitles"] = meme_titles
-
     # MVP Insight: pick ONE archetype (Playmaker, Carry, Farmer, Specialist, Objective Player, Teamfighter, Aggressive, Consistent)
     total_wins = champion_stats.values.sum { |c| c[:wins] }
     winrate = games_count.positive? ? (100.0 * total_wins / games_count) : 0
@@ -669,8 +688,6 @@ class ComputeMostPlayedWithJob < ApplicationJob
     gold_top_pct = (ggi["gamesTopGoldPercent"] || 0).to_f
     plates_pg = games_count.positive? ? (total_turret_plates_taken.to_f / games_count) : 0
     avg_takedowns_early = games_with_early_stats.positive? ? (sum_takedowns_first_x / games_with_early_stats) : 0
-    scuttle = (extra_stats["scuttleCrabKills"] || 0).to_f
-    buffs = (extra_stats["buffsStolen"] || 0).to_f
     save_ally = (extra_stats["saveAllyFromDeath"] || 0).to_f
     assists_pg = games_count.positive? ? (total_assists.to_f / games_count) : 0
     kills_pg = games_count.positive? ? (total_kills.to_f / games_count) : 0
@@ -742,6 +759,31 @@ class ComputeMostPlayedWithJob < ApplicationJob
       extra_stats["mvpInsight"] = { "archetype" => archetype_name, "stats" => mvp_stats }
     end
 
+    # Remove unused stats from storage (only keep what the recap display uses)
+    extra_stats.delete("playstyleIdentity")
+    extra_stats.delete("clutchChaosMoments")
+    extra_stats.delete("economyScaling")
+    extra_stats.delete("visionMapIq")
+    extra_stats.delete("damageProfile")
+    extra_stats.delete("botLaneSynergy")
+    extra_stats.delete("mostPopularQueueType")
+    extra_stats.delete("timeByQueue")
+    extra_stats.delete("winrateInsights")
+    extra_stats.delete("streaks")
+    extra_stats.delete("timePlayedHeatmap")
+    extra_stats.delete("avgCsPerMin")
+    extra_stats.delete("saveAllyFromDeath")
+    # Slim championPersonality to only mostPlayedChampion (used by display)
+    cp = extra_stats["championPersonality"]
+    if cp.is_a?(Hash)
+      most_played = cp["mostPlayedChampion"] || cp[:mostPlayedChampion]
+      if most_played.present?
+        extra_stats["championPersonality"] = { "mostPlayedChampion" => most_played }
+      else
+        extra_stats.delete("championPersonality")
+      end
+    end
+
     most_played_with = top_teammates.map do |teammate_puuid, counts|
       riot_id = riot_ids_by_puuid[teammate_puuid]
       {
@@ -766,7 +808,7 @@ class ComputeMostPlayedWithJob < ApplicationJob
     fav_items = item_counts
       .reject { |item_id, _| EXCLUDED_ITEM_IDS.include?(item_id) }
       .sort_by { |_id, count| -count }
-      .first(5)
+      .first(8)
       .map { |item_id, count| { item_id: item_id, count: count } }
 
     our_team_bans = our_team_ban_counts
@@ -787,6 +829,7 @@ class ComputeMostPlayedWithJob < ApplicationJob
         ping_breakdown: ping_breakdown,
         total_game_seconds: total_game_seconds,
         total_gold_spent: total_gold_spent,
+        total_time_spent_dead: sum_time_spent_dead.round,
         fav_items: fav_items,
         extra_stats: extra_stats,
         our_team_bans: our_team_bans,
@@ -800,7 +843,7 @@ class ComputeMostPlayedWithJob < ApplicationJob
         updated_at: now
       } ],
       unique_by: %i[player_id year],
-      update_only: %i[total_pings ping_breakdown total_game_seconds total_gold_spent fav_items extra_stats our_team_bans enemy_team_bans total_kills total_deaths total_assists most_played_with most_beat_us]
+      update_only: %i[total_pings ping_breakdown total_game_seconds total_gold_spent total_time_spent_dead fav_items extra_stats our_team_bans enemy_team_bans total_kills total_deaths total_assists most_played_with most_beat_us]
     )
 
     Rails.logger.info "[ComputeMostPlayedWithJob] Upserted RecapYearStat for player #{player_id} year #{year} (#{most_played_with.size} teammates, #{most_beat_us.size} enemies)"

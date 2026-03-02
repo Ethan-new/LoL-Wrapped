@@ -29,6 +29,60 @@ function safeUrlSegment(str) {
 // Allowed hostnames for profile icon URLs (Riot Data Dragon, Community Dragon).
 const SAFE_IMG_HOSTS = ["ddragon.leagueoflegends.com", "raw.communitydragon.org"]
 
+// Community Dragon splash filenames for champions with non-standard naming (e.g. VGU variants).
+const SPLASH_FILENAME_OVERRIDES = {
+  viktor: "viktor_splash_centered_0.viktorvgu.jpg"
+}
+
+// Champions that use skins/skin0 instead of skins/base in Community Dragon.
+const SPLASH_SKIN0_CHAMPIONS = ["hwei"]
+
+// Human-readable labels for Riot API ping types.
+const PING_LABELS = {
+  allInPings: "All-in",
+  assistMePings: "Assist me",
+  baitPings: "Bait",
+  basicPings: "Basic",
+  commandPings: "Command",
+  dangerPings: "Danger",
+  enemyMissingPings: "Enemy missing",
+  enemyVisionPings: "Enemy vision",
+  getBackPings: "Get back",
+  retreatPings: "Retreat",
+  holdPings: "Hold",
+  needVisionPings: "Need vision",
+  onMyWayPings: "On my way",
+  pushPings: "Push",
+  visionClearedPings: "Vision cleared"
+}
+
+// Local ping icon paths (public/pings/)
+const PING_ICON_URLS = {
+  allInPings: "/pings/All_In_ping.webp",
+  assistMePings: "/pings/Assist_Me_ping.webp",
+  baitPings: "/pings/Bait_ping.webp",
+  basicPings: "/pings/Generic_ping.webp",
+  commandPings: "/pings/Target_ping.webp",
+  dangerPings: "/pings/Caution_ping.webp",
+  enemyMissingPings: "/pings/Enemy_Missing_ping.webp",
+  enemyVisionPings: "/pings/Enemy_Vision_ping.webp",
+  getBackPings: "/pings/Retreat_ping.webp",
+  retreatPings: "/pings/Retreat_ping.webp",
+  holdPings: "/pings/Hold_ping.webp",
+  needVisionPings: "/pings/Need_Vision_ping.webp",
+  onMyWayPings: "/pings/On_My_Way_ping.webp",
+  pushPings: "/pings/Push_ping.webp",
+  visionClearedPings: "/pings/Generic_ping.webp"
+}
+
+function pingKeyToLabel(key) {
+  const k = String(key || "").replace(/[Pp]ings?$/, "")
+  if (!k) return key
+  const label = PING_LABELS[key]
+  if (label) return label
+  return k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim()
+}
+
 // Returns URL only if it's a safe https URL from a whitelisted host. Prevents XSS via javascript:, data:, etc.
 function safeProfileIconUrl(url) {
   if (!url || typeof url !== "string") return ""
@@ -67,9 +121,10 @@ export default class extends Controller {
     backUrl: String
   }
 
-  static targets = ["recapAction", "generateButton", "viewButton", "computeButton", "message", "progressBlock", "progressSpinner", "progressContent", "wrappedModal", "cardsContainer"]
+  static targets = ["recapAction", "recapActionLabel", "recapActionIconGenerate", "recapActionIconWatch", "generateButton", "viewButton", "computeButton", "message", "loadingBlock", "progressBlock", "progressSpinner", "progressContent", "wrappedModal", "cardsContainer", "shareBlock"]
 
   async connect() {
+    this.updateStatusDisplay()
     await this.refreshRecapStatus()
     this.updateStatusDisplay()
     if (this.autoloadValue && this.recapUrlValue) {
@@ -81,10 +136,8 @@ export default class extends Controller {
     const year = recapYear()
     const url = this.recapUrlValue.replace("YEAR", year)
     if (this.hasViewButtonTarget) this.viewButtonTarget.textContent = "Loading…"
-    if (this.hasMessageTarget) {
-      this.messageTarget.textContent = "Loading recap…"
-      this.messageTarget.classList.remove("hidden")
-    }
+    if (this.hasLoadingBlockTarget) this.loadingBlockTarget.classList.remove("hidden")
+    if (this.hasMessageTarget) this.showMessage("", "")
     try {
       const response = await fetch(url, { headers: { "Accept": "application/json" } })
       const contentType = response.headers.get("content-type") || ""
@@ -92,10 +145,19 @@ export default class extends Controller {
       if (contentType.includes("application/json")) {
         data = await response.json().catch(() => ({}))
       } else if (!response.ok) {
+        if (this.hasLoadingBlockTarget) this.loadingBlockTarget.classList.add("hidden")
         this.showMessage(`Recap failed (${response.status}). Try again later.`, "error")
         return
       }
-      const hasExtraStats = data.extra_stats && (Object.values(data.extra_stats).some((v) => v != null && typeof v === "number" && v > 0) || (data.extra_stats.playstyleIdentity && Object.keys(data.extra_stats.playstyleIdentity || {}).length > 0) || (data.extra_stats.clutchChaosMoments && Object.keys(data.extra_stats.clutchChaosMoments || {}).length > 0) || (data.extra_stats.economyScaling && Object.keys(data.extra_stats.economyScaling || {}).length > 0) || (data.extra_stats.championPersonality && Object.keys(data.extra_stats.championPersonality || {}).length > 0) || (data.extra_stats.visionMapIq && Object.keys(data.extra_stats.visionMapIq || {}).length > 0) || (data.extra_stats.damageProfile && Object.keys(data.extra_stats.damageProfile || {}).length > 0) || (data.extra_stats.botLaneSynergy && Object.keys(data.extra_stats.botLaneSynergy || {}).length > 0) || (Array.isArray(data.extra_stats.memeTitles) && data.extra_stats.memeTitles.length > 0))
+      const hasExtraStats = data.extra_stats && (
+        (data.extra_stats.gamesCount ?? 0) > 0 ||
+        (data.extra_stats.queueDistribution && Object.keys(data.extra_stats.queueDistribution || {}).length > 0) ||
+        (data.extra_stats.championPersonality?.mostPlayedChampion ?? data.extra_stats.championPersonality?.["mostPlayedChampion"]) ||
+        (data.extra_stats.topChampions?.length ?? 0) > 0 ||
+        data.extra_stats.mvpInsight ||
+        data.extra_stats.bestGame ||
+        data.extra_stats.worstGame
+      )
       const hasBans = (data.our_team_bans?.length ?? 0) > 0 || (data.enemy_team_bans?.length ?? 0) > 0
       const hasKda = (data.total_kills ?? 0) > 0 || (data.total_deaths ?? 0) > 0 || (data.total_assists ?? 0) > 0
       if (response.ok && (data.most_played_with?.length || data.most_beat_us?.length || (data.total_pings ?? 0) > 0 || (data.total_game_seconds ?? 0) > 0 || (data.total_gold_spent ?? 0) > 0 || (data.fav_items?.length ?? 0) > 0 || hasExtraStats || hasBans || hasKda)) {
@@ -105,11 +167,14 @@ export default class extends Controller {
           this.wrappedModalTarget.classList.remove("hidden")
           this.wrappedModalTarget.setAttribute("aria-hidden", "false")
         }
+        if (this.hasLoadingBlockTarget) this.loadingBlockTarget.classList.add("hidden")
         if (this.hasMessageTarget) this.showMessage("", "")
       } else {
+        if (this.hasLoadingBlockTarget) this.loadingBlockTarget.classList.add("hidden")
         this.showMessage(data.error || "No recap data for this year. Generate a recap from your profile first.", "error")
       }
     } catch (err) {
+      if (this.hasLoadingBlockTarget) this.loadingBlockTarget.classList.add("hidden")
       this.showMessage("Failed to load recap: " + (err?.message || "network error"), "error")
     } finally {
       if (this.hasViewButtonTarget) this.viewButtonTarget.textContent = "View recap"
@@ -180,7 +245,15 @@ export default class extends Controller {
       if (!response.ok) return
       const data = await response.json().catch(() => ({}))
       const hasData = (data.most_played_with?.length || data.most_beat_us?.length || (data.total_pings ?? 0) > 0 || (data.total_game_seconds ?? 0) > 0 || (data.total_gold_spent ?? 0) > 0 || (data.fav_items?.length ?? 0) > 0) ||
-        (data.extra_stats && (Object.values(data.extra_stats).some((v) => v != null && typeof v === "number" && v > 0) || (data.extra_stats.playstyleIdentity && Object.keys(data.extra_stats.playstyleIdentity || {}).length > 0) || (data.extra_stats.clutchChaosMoments && Object.keys(data.extra_stats.clutchChaosMoments || {}).length > 0) || (data.extra_stats.economyScaling && Object.keys(data.extra_stats.economyScaling || {}).length > 0) || (data.extra_stats.championPersonality && Object.keys(data.extra_stats.championPersonality || {}).length > 0) || (data.extra_stats.visionMapIq && Object.keys(data.extra_stats.visionMapIq || {}).length > 0) || (data.extra_stats.damageProfile && Object.keys(data.extra_stats.damageProfile || {}).length > 0) || (data.extra_stats.botLaneSynergy && Object.keys(data.extra_stats.botLaneSynergy || {}).length > 0) || (Array.isArray(data.extra_stats.memeTitles) && data.extra_stats.memeTitles.length > 0))) ||
+        (data.extra_stats && (
+          (data.extra_stats.gamesCount ?? 0) > 0 ||
+          (data.extra_stats.queueDistribution && Object.keys(data.extra_stats.queueDistribution || {}).length > 0) ||
+          (data.extra_stats.championPersonality?.mostPlayedChampion ?? data.extra_stats.championPersonality?.["mostPlayedChampion"]) ||
+          (data.extra_stats.topChampions?.length ?? 0) > 0 ||
+          data.extra_stats.mvpInsight ||
+          data.extra_stats.bestGame ||
+          data.extra_stats.worstGame
+        )) ||
         (data.our_team_bans?.length ?? 0) > 0 || (data.enemy_team_bans?.length ?? 0) > 0 ||
         (data.total_kills ?? 0) > 0 || (data.total_deaths ?? 0) > 0 || (data.total_assists ?? 0) > 0
       if (hasData) {
@@ -212,6 +285,9 @@ export default class extends Controller {
       this.updateButtonState("compute", isGenerating, "Computing…", "Compute")
     }
 
+    if (this.hasShareBlockTarget) {
+      this.shareBlockTarget.classList.toggle("hidden", !hasRecap)
+    }
     if (isGenerating) {
       this.updateProgressBlock()
       this.showMessage("", "")
@@ -364,21 +440,34 @@ export default class extends Controller {
 
   updateRecapAction(isGenerating, hasRecap) {
     const el = this.recapActionTarget
+    const labelEl = this.hasRecapActionLabelTarget ? this.recapActionLabelTarget : el
     if (isGenerating) {
       el.href = "#"
-      el.textContent = "Generating…"
+      labelEl.textContent = "Generating…"
       el.classList.add("pointer-events-none", "opacity-75")
       el.setAttribute("aria-disabled", "true")
+      this._showRecapActionIcon("generate")
     } else {
       if (hasRecap) {
         el.href = this.recapPageUrlValue || "#"
-        el.textContent = "Watch my recap"
+        labelEl.textContent = "Watch my recap"
+        this._showRecapActionIcon("watch")
       } else {
         el.href = "#"
-        el.textContent = "Generate my recap"
+        labelEl.textContent = "Generate my recap"
+        this._showRecapActionIcon("generate")
       }
       el.classList.remove("pointer-events-none", "opacity-75")
       el.removeAttribute("aria-disabled")
+    }
+  }
+
+  _showRecapActionIcon(which) {
+    if (this.hasRecapActionIconGenerateTarget) {
+      this.recapActionIconGenerateTarget.classList.toggle("hidden", which !== "generate")
+    }
+    if (this.hasRecapActionIconWatchTarget) {
+      this.recapActionIconWatchTarget.classList.toggle("hidden", which !== "watch")
     }
   }
 
@@ -431,9 +520,11 @@ export default class extends Controller {
     this.generating = true
     this.setButtonLoading("generate", true)
     if (this.hasRecapActionTarget) {
-      this.recapActionTarget.textContent = "Generating…"
+      const labelEl = this.hasRecapActionLabelTarget ? this.recapActionLabelTarget : this.recapActionTarget
+      labelEl.textContent = "Generating…"
       this.recapActionTarget.href = "#"
       this.recapActionTarget.classList.add("pointer-events-none", "opacity-75")
+      this._showRecapActionIcon("generate")
     }
     this.showMessage("", "")
 
@@ -542,7 +633,15 @@ export default class extends Controller {
         this.showMessage(`Recap failed (${response.status}). Try again later.`, "error")
         return
       }
-      const hasExtraStats = data.extra_stats && (Object.values(data.extra_stats).some((v) => v != null && typeof v === "number" && v > 0) || (data.extra_stats.playstyleIdentity && Object.keys(data.extra_stats.playstyleIdentity || {}).length > 0) || (data.extra_stats.clutchChaosMoments && Object.keys(data.extra_stats.clutchChaosMoments || {}).length > 0) || (data.extra_stats.economyScaling && Object.keys(data.extra_stats.economyScaling || {}).length > 0) || (data.extra_stats.championPersonality && Object.keys(data.extra_stats.championPersonality || {}).length > 0) || (data.extra_stats.visionMapIq && Object.keys(data.extra_stats.visionMapIq || {}).length > 0) || (data.extra_stats.damageProfile && Object.keys(data.extra_stats.damageProfile || {}).length > 0) || (data.extra_stats.botLaneSynergy && Object.keys(data.extra_stats.botLaneSynergy || {}).length > 0) || (Array.isArray(data.extra_stats.memeTitles) && data.extra_stats.memeTitles.length > 0))
+      const hasExtraStats = data.extra_stats && (
+        (data.extra_stats.gamesCount ?? 0) > 0 ||
+        (data.extra_stats.queueDistribution && Object.keys(data.extra_stats.queueDistribution || {}).length > 0) ||
+        (data.extra_stats.championPersonality?.mostPlayedChampion ?? data.extra_stats.championPersonality?.["mostPlayedChampion"]) ||
+        (data.extra_stats.topChampions?.length ?? 0) > 0 ||
+        data.extra_stats.mvpInsight ||
+        data.extra_stats.bestGame ||
+        data.extra_stats.worstGame
+      )
       const hasBans = (data.our_team_bans?.length ?? 0) > 0 || (data.enemy_team_bans?.length ?? 0) > 0
       const hasKda = (data.total_kills ?? 0) > 0 || (data.total_deaths ?? 0) > 0 || (data.total_assists ?? 0) > 0
       if (response.ok && (data.most_played_with?.length || data.most_beat_us?.length || (data.total_pings ?? 0) > 0 || (data.total_game_seconds ?? 0) > 0 || (data.total_gold_spent ?? 0) > 0 || (data.fav_items?.length ?? 0) > 0 || hasExtraStats || hasBans || hasKda)) {
@@ -608,55 +707,6 @@ export default class extends Controller {
     return `${h}h`
   }
 
-  extraStatLabel(key) {
-    const labels = {
-      skillshotsHit: "Skill shots hit",
-      skillshotsDodged: "Skill shots dodged",
-      outnumberedKills: "Outnumbered kills",
-      soloKills: "Solo kills",
-      saveAllyFromDeath: "Allies saved from death",
-      timeCCingOthers: "Time CCing others",
-      totalTimeCCDealt: "Total time CC dealt",
-      scuttleCrabKills: "Scuttle crab kills",
-      buffsStolen: "Buffs stolen"
-    }
-    return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()).trim()
-  }
-
-  formatExtraStatValue(key, val) {
-    if (val == null || val === "") return "0"
-    const n = Number(val)
-    if (Number.isNaN(n)) return String(val)
-    if (key === "timeCCingOthers" || key === "totalTimeCCDealt") {
-      if (n >= 3600) return `${Math.floor(n / 3600)}h ${Math.floor((n % 3600) / 60)}m`
-      if (n >= 60) return `${Math.floor(n / 60)}m ${Math.floor(n % 60)}s`
-      return `${Math.floor(n)}s`
-    }
-    return n >= 1000 ? n.toLocaleString() : String(Math.round(n))
-  }
-
-  pingLabel(key) {
-    const labels = {
-      allInPings: "All-in",
-      assistMePings: "Assist me",
-      baitPings: "Bait",
-      basicPings: "Basic",
-      commandPings: "Command",
-      dangerPings: "Danger",
-      enemyMissingPings: "Enemy missing",
-      enemyVisionPings: "Enemy vision",
-      getBackPings: "Get back",
-      holdPings: "Hold",
-      needVisionPings: "Need vision",
-      onMyWayPings: "On my way",
-      pushPings: "Push",
-      retreatPings: "Retreat",
-      visionClearedPings: "Vision cleared",
-      visionPings: "Vision"
-    }
-    return labels[key] || key.replace(/Pings?$/i, "").replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()).trim()
-  }
-
   renderWrappedCards(data, year, champNames = {}, itemNames = {}) {
     if (!this.hasCardsContainerTarget || !this.hasWrappedModalTarget) return
 
@@ -679,11 +729,7 @@ export default class extends Controller {
     const CHAMP_IMG_CDRAGON = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons"
 
     const cards = []
-
-    if (playerRiotId || year) {
-      const profileIconUrl = this.profileIconUrlValue || data.profile_icon_url || ""
-      cards.push({ type: "intro", html: this.cardIntro(playerRiotId, year, profileIconUrl) })
-    }
+    const profileIconUrl = this.profileIconUrlValue || data.profile_icon_url || ""
     const queueDistribution = extraStats.queueDistribution || extraStats["queueDistribution"]
     const totalGamesFromQueue = queueDistribution && typeof queueDistribution === "object"
       ? Object.values(queueDistribution).reduce((a, b) => a + (Number(b) || 0), 0)
@@ -691,9 +737,17 @@ export default class extends Controller {
     const gamesCount = extraStats.gamesCount ?? extraStats["gamesCount"] ?? totalGamesFromQueue
     const uniqueChampions = Number(extraStats.uniqueChampionsPlayed ?? extraStats["uniqueChampionsPlayed"] ?? 0)
     const hasOverview = gamesCount > 0 || totalGameSeconds > 0 || uniqueChampions > 0
+
     if (hasOverview) {
+      if (playerRiotId || year) {
+        cards.push({ type: "intro", html: this.cardIntro(playerRiotId, year, profileIconUrl) })
+      }
       cards.push({ type: "overview", html: this.cardOverview(gamesCount, totalGameSeconds, uniqueChampions) })
+    } else {
+      cards.push({ type: "empty", html: this.cardEmptyNoGames(year, playerRiotId, profileIconUrl) })
     }
+
+    if (hasOverview) {
     const championPersonalityData = extraStats.championPersonality || extraStats["championPersonality"] || extraStats.champion_personality || extraStats["champion_personality"]
     const mostPlayed = championPersonalityData?.mostPlayedChampion || championPersonalityData?.["mostPlayedChampion"] || championPersonalityData?.most_played_champion || championPersonalityData?.["most_played_champion"]
     if (mostPlayed && (mostPlayed.games ?? mostPlayed["games"]) > 0) {
@@ -702,6 +756,15 @@ export default class extends Controller {
     const topChampions = extraStats.topChampions ?? extraStats["topChampions"] ?? extraStats.top_champions ?? extraStats["top_champions"]
     if (topChampions && Array.isArray(topChampions) && topChampions.length > 0) {
       cards.push({ type: "championPool", html: this.cardChampionPool(topChampions, champNames, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON) })
+    }
+    const seasonKdaHtml = this.cardSeasonKda(totalKills, totalDeaths, totalAssists, gamesCount)
+    if (seasonKdaHtml) {
+      cards.push({ type: "seasonKda", html: seasonKdaHtml })
+    }
+    const multiKills = extraStats.multiKills ?? extraStats["multiKills"]
+    if (multiKills) {
+      const multiKillsHtml = this.cardMultiKills(multiKills, champNames, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON)
+      if (multiKillsHtml) cards.push({ type: "multiKills", html: multiKillsHtml })
     }
     const mvpInsight = extraStats.mvpInsight ?? extraStats["mvpInsight"]
     if (mvpInsight) {
@@ -725,19 +788,27 @@ export default class extends Controller {
     if (filteredFavItems.length > 0) {
       cards.push({ type: "items", html: this.cardItems(filteredFavItems, itemNames, ITEM_IMG_BASE) })
     }
+    if (totalPings > 0) {
+      const pingsHtml = this.cardPings(pingBreakdown, totalPings)
+      if (pingsHtml) cards.push({ type: "pings", html: pingsHtml })
+    }
+    }
 
     if (cards.length === 0) {
-      cards.push({ type: "empty", html: '<p class="text-stone-500 text-lg">No recap data for this year.</p>' })
+      cards.push({ type: "empty", html: this.cardEmptyNoGames(year, playerRiotId, profileIconUrl) })
     }
+    cards.push({ type: "thankYou", html: this.cardThankYou() })
 
     this.cardsContainerTarget.innerHTML = cards.map((c) => {
       const isWideCard = c.type === "mostPlayedChampion" || c.type === "championPool" || c.type === "bestAndWorstGame" || c.type === "friendsAndFoes"
       const maxWidth = c.type === "championPool" ? "max-w-4xl min-w-0" : c.type === "bestAndWorstGame" ? "max-w-5xl min-w-0" : c.type === "mostPlayedChampion" ? "max-w-2xl" : c.type === "friendsAndFoes" ? "max-w-2xl" : ""
       const innerClass = isWideCard ? `flex w-full ${maxWidth} flex-col items-center` : "flex max-w-lg flex-col items-center text-center"
-      return `<div class="wrapped-card flex min-w-full flex-shrink-0 snap-center snap-always items-center justify-center p-8" role="group" aria-roledescription="slide">
+      return `<div class="wrapped-card flex min-w-full flex-shrink-0 snap-center snap-always items-center justify-center p-8" data-card-type="${escapeHtml(c.type)}" role="group" aria-roledescription="slide">
         <div class="${innerClass}">${c.html}</div>
       </div>`
     }).join("")
+
+    this.setupOverviewCountUp()
 
     this.wrappedModalTarget.classList.remove("hidden")
     this.wrappedModalTarget.setAttribute("aria-hidden", "false")
@@ -752,6 +823,49 @@ export default class extends Controller {
       "wrapped-cards"
     )
     wrappedController?.refresh()
+  }
+
+  setupOverviewCountUp() {
+    const overviewCard = this.cardsContainerTarget?.querySelector('[data-card-type="overview"]')
+    if (!overviewCard) return
+
+    const targets = overviewCard.querySelectorAll(".count-up-target")
+    if (targets.length === 0) return
+
+    const DURATION = 1500
+    const easeOutCubic = (t) => 1 - (1 - t) ** 3
+
+    const animate = () => {
+      targets.forEach((el) => {
+        const target = parseInt(el.dataset.countTarget, 10)
+        if (Number.isNaN(target)) return
+        const start = 0
+        const startTime = performance.now()
+
+        const step = (now) => {
+          const elapsed = now - startTime
+          const progress = Math.min(elapsed / DURATION, 1)
+          const eased = easeOutCubic(progress)
+          const current = Math.round(start + (target - start) * eased)
+          el.textContent = current
+          if (progress < 1) requestAnimationFrame(step)
+          else el.textContent = target
+        }
+        requestAnimationFrame(step)
+      })
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (entry?.isIntersecting) {
+          animate()
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.5 }
+    )
+    observer.observe(overviewCard)
   }
 
   championAbilityVideoUrl(champ) {
@@ -772,7 +886,10 @@ export default class extends Controller {
     }
     if (charId && /^[a-zA-Z0-9_]+$/.test(String(charId))) {
       const name = String(charId).toLowerCase()
-      return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/characters/${name}/skins/base/images/${name}_splash_uncentered_0.jpg`
+      // Community Dragon uses different filenames for some VGU champions (e.g. Viktor)
+      const splashFilename = SPLASH_FILENAME_OVERRIDES[name] ?? `${name}_splash_centered_0.jpg`
+      const skinDir = SPLASH_SKIN0_CHAMPIONS.includes(name) ? "skin0" : "base"
+      return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/characters/${name}/skins/${skinDir}/images/${splashFilename}`
     }
     return ""
   }
@@ -793,15 +910,15 @@ export default class extends Controller {
     const posterUrl = splashUrl || iconUrl
     let mediaHtml = ""
     if (videoUrl) {
-      const fallback = posterUrl ? `<img src="${escapeHtml(posterUrl)}" alt="" class="absolute inset-0 hidden h-full w-full object-cover object-top" aria-hidden="true">` : ""
-      mediaHtml = `<video src="${escapeHtml(videoUrl)}" poster="${escapeHtml(posterUrl || "")}" class="absolute inset-0 h-full w-full object-cover object-top" autoplay loop muted playsinline onerror="this.style.display='none';const i=this.nextElementSibling;if(i)i.classList.remove('hidden')"></video>${fallback}`
+      const fallback = posterUrl ? `<img src="${escapeHtml(posterUrl)}" alt="" class="absolute inset-0 hidden h-full w-full object-cover" aria-hidden="true">` : ""
+      mediaHtml = `<video src="${escapeHtml(videoUrl)}" poster="${escapeHtml(posterUrl || "")}" class="absolute inset-0 h-full w-full object-cover" autoplay loop muted playsinline onerror="this.style.display='none';const i=this.nextElementSibling;if(i)i.classList.remove('hidden')"></video>${fallback}`
     } else if (splashUrl) {
-      mediaHtml = `<img src="${escapeHtml(splashUrl)}" alt="" class="absolute inset-0 h-full w-full object-cover object-top">`
+      mediaHtml = `<img src="${escapeHtml(splashUrl)}" alt="" class="absolute inset-0 h-full w-full object-cover">`
     } else if (iconUrl) {
       mediaHtml = `<img src="${escapeHtml(iconUrl)}" alt="" class="absolute inset-0 h-full w-full object-cover opacity-30">`
     }
     return `
-      <p class="mb-4 text-sm font-semibold uppercase tracking-[0.25em] text-stone-500">Most Played Champion</p>
+      <p class="mb-4 text-sm font-semibold uppercase tracking-[0.25em] text-white">Most Played Champion</p>
       <div class="relative flex min-h-[280px] w-full items-end overflow-hidden rounded-xl bg-stone-800 sm:min-h-[320px] md:min-h-[360px]">
         ${mediaHtml}
         <div class="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/50 to-transparent"></div>
@@ -810,7 +927,7 @@ export default class extends Controller {
           <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 font-medium text-stone-200">
             <span>${escapeHtml(String(games))} Games</span>
             ${winrate != null ? `<span>${escapeHtml(Number(winrate).toFixed(0))}% WR</span>` : ""}
-            ${kdaStr ? `<span>${escapeHtml(kdaStr)} KDA</span>` : ""}
+            ${kdaStr ? `<span>AVG: ${escapeHtml(kdaStr)} KDA</span>` : ""}
           </div>
         </div>
       </div>
@@ -838,7 +955,7 @@ export default class extends Controller {
       const imgSrc = splash || icon
       return `
         <div class="relative flex aspect-[3/4] shrink-0 flex-col overflow-hidden rounded-2xl bg-stone-900 shadow-2xl ring-1 ring-stone-700/50 ring-inset w-[140px] sm:w-[160px] md:w-[180px]" data-carousel-card>
-          ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="absolute inset-0 h-full w-full object-cover object-[80%_top]" onerror="this.style.display='none'">` : ""}
+          ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="absolute inset-0 h-full w-full object-cover" onerror="this.style.display='none'">` : ""}
           <div class="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-900/20 to-transparent"></div>
           <div class="absolute inset-0 rounded-2xl ring-1 ring-white/5 ring-inset" aria-hidden="true"></div>
           <div class="relative z-10 mt-auto flex flex-col justify-end bg-gradient-to-t from-black/80 to-transparent p-4">
@@ -851,7 +968,7 @@ export default class extends Controller {
     }).join("")
     const cardsDuplicated = cards + cards
     return `
-      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-stone-500">Champion Pool</p>
+      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-white">Champion Pool</p>
       <div class="w-full overflow-hidden" data-controller="champion-pool-carousel">
         <div class="flex flex-nowrap gap-5" style="width: max-content" data-carousel-track>
           ${cardsDuplicated}
@@ -873,7 +990,7 @@ export default class extends Controller {
       .join("")
     const badgeImg = "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/hextech-chest-gold.svg"
     return `
-      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-stone-500">Your Playstyle</p>
+      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-white">Your Playstyle</p>
       <div class="flex flex-col items-center gap-6">
         <img src="${escapeHtml(badgeImg)}" alt="" class="h-24 w-24 sm:h-28 sm:w-28 object-contain" onerror="this.style.display='none'">
         <p class="font-beaufort text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-white whitespace-nowrap"><span class="text-white">You are a </span><span class="text-cyan-400">${escapeHtml(label)}</span></p>
@@ -898,9 +1015,9 @@ export default class extends Controller {
       const mins = Math.floor(sec / 60)
       const damageStr = damage >= 1000 ? `${(damage / 1000).toFixed(0)}k` : String(damage)
       const champImg = this.championSplashUrl(bg, ddragonBase, champNames) || this.championIconUrl(bg, ddragonBase, cdragonBase)
-      const imgHtml = champImg ? `<img src="${escapeHtml(champImg)}" alt="" class="absolute inset-0 h-full w-full object-cover object-[80%_top]" onerror="this.style.display='none'">` : ""
+      const imgHtml = champImg ? `<img src="${escapeHtml(champImg)}" alt="" class="absolute inset-0 h-full w-full object-cover" onerror="this.style.display='none'">` : ""
       const inner = `
-        <p class="mb-4 text-xs font-semibold uppercase tracking-[0.35em] text-stone-500">Best Game</p>
+        <p class="mb-4 text-xs font-semibold uppercase tracking-[0.35em] text-white">Best Game</p>
         <div class="relative flex flex-col items-center">
           <div class="relative aspect-[3/4] w-[280px] sm:w-[320px] overflow-hidden rounded-xl shadow-2xl">
             ${imgHtml}
@@ -921,9 +1038,9 @@ export default class extends Controller {
       const d = Number(wg.deaths ?? wg["deaths"] ?? 0)
       const a = Number(wg.assists ?? wg["assists"] ?? 0)
       const champImg = this.championSplashUrl(wg, ddragonBase, champNames) || this.championIconUrl(wg, ddragonBase, cdragonBase)
-      const imgHtml = champImg ? `<img src="${escapeHtml(champImg)}" alt="" class="absolute inset-0 h-full w-full object-cover object-[80%_top] opacity-95" onerror="this.style.display='none'">` : ""
+      const imgHtml = champImg ? `<img src="${escapeHtml(champImg)}" alt="" class="absolute inset-0 h-full w-full object-cover opacity-95" onerror="this.style.display='none'">` : ""
       const inner = `
-        <p class="mb-4 text-xs font-semibold uppercase tracking-[0.35em] text-stone-500">Worst Game</p>
+        <p class="mb-4 text-xs font-semibold uppercase tracking-[0.35em] text-white">Worst Game</p>
         <div class="relative flex flex-col items-center">
           <div class="relative aspect-[3/4] w-[280px] sm:w-[320px] overflow-hidden rounded-xl shadow-2xl">
             ${imgHtml}
@@ -949,13 +1066,120 @@ export default class extends Controller {
     return `<div class="flex flex-col items-center text-center">${bestHtml || worstHtml}</div>`
   }
 
+  cardSeasonKda(totalKills, totalDeaths, totalAssists, gamesCount) {
+    const games = Math.floor(Number(gamesCount) || 0)
+    if (games <= 0) return ""
+    const totalK = Number(totalKills) || 0
+    const totalD = Number(totalDeaths) || 0
+    const totalA = Number(totalAssists) || 0
+    const avgKills = Math.round(totalK / games)
+    const avgDeaths = Math.round(totalD / games)
+    const avgAssists = Math.round(totalA / games)
+    const row = (n1, n2, n3, sizeClass) =>
+      `<div class="flex flex-col items-center gap-1">
+        <span class="font-beaufort ${sizeClass} font-bold tabular-nums tracking-tight">
+          <span class="text-blue-400">${escapeHtml(String(n1))}</span>
+          <span class="text-white"> / </span>
+          <span class="text-red-400">${escapeHtml(String(n2))}</span>
+          <span class="text-white"> / </span>
+          <span class="text-green-400">${escapeHtml(String(n3))}</span>
+        </span>
+      </div>`
+    return `
+      <div class="flex flex-col items-center gap-12">
+        <p class="font-beaufort text-sm font-semibold uppercase tracking-[0.25em] text-white">Season KDA</p>
+        <div class="flex flex-col items-center gap-8">
+          <div>
+            <p class="mb-2 font-beaufort text-sm font-medium uppercase tracking-[0.2em] text-stone-400">AVG per game</p>
+            ${row(avgKills, avgDeaths, avgAssists, "text-5xl sm:text-6xl md:text-7xl")}
+          </div>
+          <div class="border-t border-stone-600 pt-6">
+            <p class="mb-2 font-beaufort text-xs font-medium uppercase tracking-[0.2em] text-stone-400">Total</p>
+            ${row(totalK, totalD, totalA, "text-3xl sm:text-4xl md:text-5xl")}
+          </div>
+        </div>
+      </div>
+    `
+  }
+
+  cardMultiKills(multiKills, champNames = {}, ddragonBase, cdragonBase) {
+    const double = Number(multiKills.doubleKills ?? multiKills["doubleKills"] ?? 0)
+    const triple = Number(multiKills.tripleKills ?? multiKills["tripleKills"] ?? 0)
+    const quadra = Number(multiKills.quadraKills ?? multiKills["quadraKills"] ?? 0)
+    const penta = Number(multiKills.pentaKills ?? multiKills["pentaKills"] ?? 0)
+    if (double === 0 && triple === 0 && quadra === 0 && penta === 0) return ""
+    const byChampion = multiKills.byChampion ?? multiKills["byChampion"] ?? []
+    const top3 = (key) =>
+      byChampion
+        .filter((e) => (Number(e[key] ?? 0)) > 0)
+        .sort((a, b) => (Number(b[key] ?? 0)) - (Number(a[key] ?? 0)))
+        .slice(0, 3)
+    const iconUrl = (entry) =>
+      this.championIconUrl({ championId: entry.championId ?? entry["championId"], key: entry.key ?? entry["key"] }, ddragonBase, cdragonBase)
+    const iconsHtml = (champs, key) => {
+      const imgs = champs.map((c) => {
+        const url = iconUrl(c)
+        const count = Number(c[key] ?? 0)
+        const name = c.name ?? c["name"] ?? ""
+        const label = name ? `${escapeHtml(String(name))}: ${count}` : String(count)
+        return url
+          ? `<span class="group relative inline-block">
+              <img src="${escapeHtml(url)}" alt="" class="h-8 w-8 rounded-full ring-1 ring-stone-600 cursor-help transition-transform duration-150 hover:scale-110" aria-label="${label}" onerror="this.style.display='none'">
+              <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-stone-800 px-2 py-1 text-xs font-medium text-white ring-1 ring-stone-600 opacity-0 transition-opacity duration-75 group-hover:opacity-100">${label}</span>
+            </span>`
+          : ""
+      }).filter(Boolean)
+      return imgs.length > 0 ? `<div class="mt-2 flex justify-center gap-1">${imgs.join("")}</div>` : ""
+    }
+    const stat = (num, label, champs, key) =>
+      `<div class="flex flex-col items-center gap-1">
+        <span class="font-beaufort text-sm font-medium uppercase tracking-wider text-stone-500">${escapeHtml(label)}</span>
+        <span class="font-beaufort text-5xl sm:text-6xl md:text-7xl font-bold tabular-nums tracking-tight text-white">${escapeHtml(String(num))}</span>
+        ${iconsHtml(champs, key)}
+      </div>`
+    const dKey = "doubleKills"
+    const tKey = "tripleKills"
+    const qKey = "quadraKills"
+    const pKey = "pentaKills"
+    return `
+      <div class="flex flex-col items-center gap-12">
+        <p class="font-beaufort text-sm font-semibold uppercase tracking-[0.25em] text-white">Multi-Kills</p>
+        <div class="grid grid-cols-2 gap-8 sm:gap-12">
+          ${stat(double, "Double Kills", top3(dKey), dKey)}
+          ${stat(triple, "Triple Kills", top3(tKey), tKey)}
+          ${stat(quadra, "Quadra Kills", top3(qKey), qKey)}
+          ${stat(penta, "Penta Kills", top3(pKey), pKey)}
+        </div>
+      </div>
+    `
+  }
+
+  cardEmptyNoGames(year, playerRiotId, profileIconUrl) {
+    const y = year || new Date().getFullYear()
+    const initial = (playerRiotId || "S").charAt(0).toUpperCase()
+    const safeUrl = safeProfileIconUrl(profileIconUrl)
+    const avatarHtml = safeUrl
+      ? `<img src="${escapeHtml(safeUrl)}" alt="" class="h-full w-full object-cover" onerror="this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')"><span class="hidden font-beaufort text-6xl font-bold text-white">${escapeHtml(initial)}</span>`
+      : `<span class="font-beaufort text-6xl font-bold text-white">${escapeHtml(initial)}</span>`
+    return `
+      <div class="flex flex-col items-center gap-8 text-center">
+        <h2 class="font-beaufort text-5xl font-bold text-white">${escapeHtml(playerRiotId || "Summoner")}</h2>
+        <div class="flex h-40 w-40 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-500/30">
+          ${avatarHtml}
+        </div>
+        <p class="font-beaufort text-4xl sm:text-5xl font-bold text-white">0 games in ${escapeHtml(String(y))}</p>
+        <p class="font-beaufort text-lg sm:text-xl text-stone-300">Congratulations, you played no games in ${escapeHtml(String(y))}.</p>
+      </div>
+    `
+  }
+
   cardOverview(gamesCount, totalGameSeconds, uniqueChampions) {
     const games = Math.floor(Number(gamesCount) || 0)
     const hours = Math.floor((Number(totalGameSeconds) || 0) / 3600)
     const champions = Math.floor(Number(uniqueChampions) || 0)
     const stat = (num, label) =>
       `<div class="flex flex-col items-center gap-1">
-        <span class="font-beaufort text-6xl sm:text-7xl md:text-8xl font-bold tabular-nums tracking-tight text-white">${escapeHtml(String(num))}</span>
+        <span class="count-up-target font-beaufort text-6xl sm:text-7xl md:text-8xl font-bold tabular-nums tracking-tight text-white" data-count-target="${num}">0</span>
         <span class="font-beaufort text-base sm:text-lg font-medium uppercase tracking-[0.2em] text-stone-400">${escapeHtml(label)}</span>
       </div>`
     return `
@@ -983,469 +1207,6 @@ export default class extends Controller {
     `
   }
 
-  cardMostPopularQueueType(data, queueDistribution) {
-    const labels = {
-      ranked_solo: { name: "The Ladder Climber", queue: "Ranked Solo Duo", color: "#60a5fa", bgClass: "bg-blue-400" },
-      ranked_flex: { name: "The Premade Professor", queue: "Ranked Flex", color: "#a78bfa", bgClass: "bg-violet-400" },
-      normal_draft: { name: "The Low-Stakes Legend", queue: "Normal Draft", color: "#34d399", bgClass: "bg-emerald-400" },
-      blind_pick: { name: "Role Roulette Survivor", queue: "Blind Pick", color: "#38bdf8", bgClass: "bg-sky-400" },
-      aram: { name: "The Bridge Brawler", queue: "ARAM", color: "#f87171", bgClass: "bg-red-400" },
-      clash: { name: "The Trophy Chaser", queue: "Clash", color: "#f472b6", bgClass: "bg-pink-400" },
-      urf_rgm: { name: "The Funmaxxer", queue: "URF / RGM", color: "#22d3ee", bgClass: "bg-cyan-400" },
-      custom: { name: "The Scrim Scholar", queue: "Custom Games", color: "#94a3b8", bgClass: "bg-slate-400" },
-      other: { name: "Queue Enthusiast", queue: "Other", color: "#64748b", bgClass: "bg-slate-500" }
-    }
-    const t = data?.type || ""
-    const info = labels[t] || { name: "Queue Enthusiast", queue: (t || "other").replace(/_/g, " "), color: "#64748b", bgClass: "bg-slate-500" }
-    const games = safeDisplay(data?.games ?? 0)
-
-    let chartHtml = ""
-    if (queueDistribution && typeof queueDistribution === "object" && Object.keys(queueDistribution).length > 0) {
-      const entries = Object.entries(queueDistribution).map(([k, v]) => [k, Number(v) || 0]).filter(([, v]) => v > 0)
-      const total = entries.reduce((s, [, v]) => s + v, 0)
-      if (total > 0) {
-        const sorted = entries.sort((a, b) => b[1] - a[1])
-        const size = 160
-        const cx = size / 2
-        const cy = size / 2
-        const rOuter = (size / 2) - 4
-        const rInner = rOuter * 0.55
-        const gapDeg = 1.5
-        let acc = 0
-        const totalDeg = 360 - gapDeg * sorted.length
-        const paths = sorted.map(([k, v]) => {
-          const pct = (v / total) * totalDeg
-          const startAngle = acc - 90
-          const endAngle = acc + pct - 90
-          acc += pct + gapDeg
-          const rad = (deg) => (deg * Math.PI) / 180
-          const x1 = cx + rOuter * Math.cos(rad(startAngle))
-          const y1 = cy + rOuter * Math.sin(rad(startAngle))
-          const x2 = cx + rOuter * Math.cos(rad(endAngle))
-          const y2 = cy + rOuter * Math.sin(rad(endAngle))
-          const x3 = cx + rInner * Math.cos(rad(endAngle))
-          const y3 = cy + rInner * Math.sin(rad(endAngle))
-          const x4 = cx + rInner * Math.cos(rad(startAngle))
-          const y4 = cy + rInner * Math.sin(rad(startAngle))
-          const large = pct > 50 ? 1 : 0
-          const d = `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 ${large} 0 ${x4} ${y4} Z`
-          const c = (labels[k] || { color: "#64748b" }).color
-          return `<path d="${d}" fill="${escapeHtml(c)}" stroke="rgba(15,23,42,0.9)" stroke-width="2"/>`
-        }).join("")
-        const legendItems = sorted.map(([k, v]) => {
-          const pct = ((100 * v) / total).toFixed(1)
-          const li = labels[k] || { queue: k.replace(/_/g, " "), color: "#64748b" }
-          const bg = (labels[k] || { bgClass: "bg-slate-500" }).bgClass
-          return `<li class="flex items-center gap-3 rounded-md px-2 py-1.5"><span class="h-3 w-3 shrink-0 rounded-sm ${escapeHtml(bg)}"></span><span class="flex-1 text-white text-sm">${escapeHtml(li.queue)}</span><span class="text-white text-sm tabular-nums">${escapeHtml(String(v))} (${escapeHtml(pct)}%)</span></li>`
-        }).join("")
-        chartHtml = `
-        <div class="relative">
-          <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="drop-shadow-lg" aria-hidden="true">
-            ${paths}
-          </svg>
-          <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div class="flex flex-col items-center">
-              <span class="text-3xl font-bold tabular-nums text-white tracking-tight">${escapeHtml(String(total))}</span>
-              <span class="text-xs font-medium uppercase tracking-wider text-white mt-0.5">games</span>
-            </div>
-          </div>
-        </div>
-        <ul class="flex w-full max-w-sm flex-col gap-0.5">${legendItems}</ul>`
-      }
-    }
-
-    const headerHtml = `
-      <p class="text-2xl font-bold text-white">${escapeHtml(info.name)}</p>
-      <p class="mt-2 text-lg text-white">Your most popular game was: ${escapeHtml(info.queue)}</p>
-      <p class="mt-2 text-lg text-white">${escapeHtml(games)} games this year</p>`
-    return { header: headerHtml, chart: chartHtml }
-  }
-
-  cardKda(k, d, a) {
-    const kNum = Number(k) || 0
-    const dNum = Number(d) || 0
-    const aNum = Number(a) || 0
-    const kdaValue = dNum > 0 ? (kNum + aNum) / dNum : Infinity
-    const kdaRatio = dNum > 0 ? kdaValue.toFixed(1) : "∞"
-    let title = ""
-    if (kdaValue > 3) title = "The Untouchable"
-    else if (kdaValue < 1.5 && dNum > 0) title = "Donation Center"
-    else if (dNum > 0) title = "Respectably Alive"
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">K/D/A (all games)</p>
-      ${title ? `<p class="mt-2 text-xl font-bold text-white">${escapeHtml(title)}</p>` : ""}
-      <div class="mt-4 flex gap-6">
-        <div><span class="block text-4xl font-bold text-green-500">${kNum.toLocaleString()}</span><span class="text-stone-500">Kills</span></div>
-        <div><span class="block text-4xl font-bold text-red-500">${dNum.toLocaleString()}</span><span class="text-stone-500">Deaths</span></div>
-        <div><span class="block text-4xl font-bold text-white">${aNum.toLocaleString()}</span><span class="text-stone-500">Assists</span></div>
-      </div>
-      <p class="mt-4 text-lg font-semibold text-stone-400">KDA ${escapeHtml(kdaRatio)}</p>
-    `
-  }
-
-  cardGoldAndLastHits(gold, lastHits, avgCsPerMin) {
-    const goldNum = Number(gold) || 0
-    const lastHitsNum = Number(lastHits) || 0
-    const csPerMin = avgCsPerMin != null && Number(avgCsPerMin) > 0 ? Number(avgCsPerMin) : null
-    let title = ""
-    if (csPerMin != null) {
-      if (csPerMin < 4) title = "CS Optional"
-      else if (csPerMin < 6) title = "Respectable Farmer"
-      else if (csPerMin < 8) title = "Creep Connoisseur"
-      else title = "Macro Merchant"
-    }
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Economy</p>
-      ${title ? `<p class="mt-2 text-xl font-bold text-white">${escapeHtml(title)}</p>` : ""}
-      <div class="mt-4 flex flex-wrap justify-center gap-8">
-        ${goldNum > 0 ? `
-          <div>
-            <p class="text-4xl font-bold text-white">${goldNum.toLocaleString()}</p>
-            <p class="text-stone-500 text-sm">gold spent</p>
-          </div>
-        ` : ""}
-        ${lastHitsNum > 0 ? `
-          <div>
-            <p class="text-4xl font-bold text-white">${lastHitsNum.toLocaleString()}</p>
-            <p class="text-stone-500 text-sm">last hits</p>
-          </div>
-        ` : ""}
-        ${csPerMin != null ? `
-          <div>
-            <p class="text-4xl font-bold text-white">${escapeHtml(String(csPerMin))}</p>
-            <p class="text-stone-500 text-sm">avg CS/min</p>
-          </div>
-        ` : ""}
-      </div>
-    `
-  }
-
-  cardTime(seconds, totalGames, timeByQueue) {
-    const hours = (Number(seconds) || 0) / 3600
-    let title = ""
-    if (hours < 10) title = "Casual Summoner"
-    else if (hours < 25) title = "Weekend Warrior"
-    else if (hours < 75) title = "Consistent Queuer"
-    else if (hours < 150) title = "Dedicated Grinder"
-    else if (hours < 300) title = "The Climb Enthusiast"
-    else if (hours < 600) title = "The Second Job"
-    else if (hours < 1000) title = "Summoner's Rift Tenant"
-    else title = "The Queue Never Ends"
-    const queueLabels = {
-      ranked_solo: { queue: "Ranked Solo/Duo", color: "#60a5fa", bgClass: "bg-blue-400" },
-      ranked_flex: { queue: "Ranked Flex", color: "#a78bfa", bgClass: "bg-violet-400" },
-      normal_draft: { queue: "Normal Draft", color: "#34d399", bgClass: "bg-emerald-400" },
-      blind_pick: { queue: "Blind Pick", color: "#38bdf8", bgClass: "bg-sky-400" },
-      aram: { queue: "ARAM", color: "#f87171", bgClass: "bg-red-400" },
-      clash: { queue: "Clash", color: "#f472b6", bgClass: "bg-pink-400" },
-      urf_rgm: { queue: "URF / RGM", color: "#22d3ee", bgClass: "bg-cyan-400" },
-      custom: { queue: "Custom", color: "#94a3b8", bgClass: "bg-slate-400" },
-      other: { queue: "Other", color: "#64748b", bgClass: "bg-slate-500" }
-    }
-    let breakdown = ""
-    let timeByModeHtml = ""
-    if (timeByQueue && typeof timeByQueue === "object" && Object.keys(timeByQueue).length > 0) {
-      const entries = Object.entries(timeByQueue)
-        .map(([k, v]) => [k, Number(v) || 0])
-        .filter(([, v]) => v > 0)
-        .sort((a, b) => b[1] - a[1])
-      const totalSecs = entries.reduce((s, [, v]) => s + v, 0)
-      if (entries.length > 0 && totalSecs > 0) {
-        const size = 160
-        const cx = size / 2
-        const cy = size / 2
-        const rOuter = (size / 2) - 4
-        const rInner = rOuter * 0.55
-        const gapDeg = 1.5
-        let acc = 0
-        const totalDeg = 360 - gapDeg * entries.length
-        const paths = entries.map(([k, v]) => {
-          const pct = (v / totalSecs) * totalDeg
-          const startAngle = acc - 90
-          const endAngle = acc + pct - 90
-          acc += pct + gapDeg
-          const rad = (deg) => (deg * Math.PI) / 180
-          const x1 = cx + rOuter * Math.cos(rad(startAngle))
-          const y1 = cy + rOuter * Math.sin(rad(startAngle))
-          const x2 = cx + rOuter * Math.cos(rad(endAngle))
-          const y2 = cy + rOuter * Math.sin(rad(endAngle))
-          const x3 = cx + rInner * Math.cos(rad(endAngle))
-          const y3 = cy + rInner * Math.sin(rad(endAngle))
-          const x4 = cx + rInner * Math.cos(rad(startAngle))
-          const y4 = cy + rInner * Math.sin(rad(startAngle))
-          const large = pct > 50 ? 1 : 0
-          const d = `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 ${large} 0 ${x4} ${y4} Z`
-          const c = (queueLabels[k] || { color: "#64748b" }).color
-          return `<path d="${d}" fill="${escapeHtml(c)}" stroke="rgba(15,23,42,0.9)" stroke-width="2"/>`
-        }).join("")
-        const legendItems = entries.map(([k, secs]) => {
-          const pct = ((100 * secs) / totalSecs).toFixed(1)
-          const li = queueLabels[k] || { queue: k.replace(/_/g, " "), color: "#64748b", bgClass: "bg-slate-500" }
-          const hrs = secs / 3600
-          const display = hrs >= 1 ? `${hrs.toFixed(1)}h` : `${Math.round(secs / 60)}m`
-          return `<li class="flex items-center gap-3 rounded-md px-2 py-1.5"><span class="h-3 w-3 shrink-0 rounded-sm ${escapeHtml(li.bgClass)}"></span><span class="flex-1 text-white text-sm">${escapeHtml(li.queue)}</span><span class="text-white text-sm tabular-nums">${escapeHtml(display)} (${escapeHtml(pct)}%)</span></li>`
-        }).join("")
-        const centerHours = this.formatGameTime(totalSecs)
-        timeByModeHtml = `
-        <div class="relative">
-          <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="drop-shadow-lg" aria-hidden="true">
-            ${paths}
-          </svg>
-          <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div class="flex flex-col items-center">
-              <span class="text-3xl font-bold tabular-nums text-white tracking-tight">${escapeHtml(centerHours)}</span>
-              <span class="text-xs font-medium uppercase tracking-wider text-white mt-0.5">hours</span>
-            </div>
-          </div>
-        </div>
-        <ul class="flex w-full max-w-sm flex-col gap-0.5">${legendItems}</ul>`
-      }
-    }
-    const headerHtml = `
-      <p class="text-xl font-bold text-white">${escapeHtml(title)}</p>
-      <p class="mt-4 text-5xl font-bold text-white">${escapeHtml(this.formatGameTime(seconds))}</p>
-      <p class="mt-2 text-white">total playtime this year</p>`
-    return { header: headerHtml, chart: timeByModeHtml }
-  }
-
-  hasPlaystyleIdentityData(pi) {
-    if (!pi || typeof pi !== "object") return false
-    const mce = pi.mainCharacterEnergy || pi["mainCharacterEnergy"]
-    const ggi = pi.goldGoblinIndex || pi["goldGoblinIndex"]
-    const rts = pi.riskToleranceScore || pi["riskToleranceScore"]
-    const egd = pi.earlyGameDemon || pi["earlyGameDemon"]
-    const hasMce = mce && (mce.gamesCount ?? mce["gamesCount"]) > 0
-    const hasGgi = ggi && (ggi.avgGoldPerMin ?? ggi["avgGoldPerMin"]) != null
-    const hasRts = rts && (rts.avgDeaths ?? rts["avgDeaths"]) != null
-    const hasEgd = egd && ((egd.avgTakedownsFirstXMinutes ?? egd["avgTakedownsFirstXMinutes"]) != null || (egd.firstBloodInvolvementPercent ?? egd["firstBloodInvolvementPercent"]) != null)
-    return hasMce || hasGgi || hasRts || hasEgd
-  }
-
-  cardPlaystyleIdentity(pi) {
-    const mce = pi.mainCharacterEnergy || pi["mainCharacterEnergy"] || {}
-    const ggi = pi.goldGoblinIndex || pi["goldGoblinIndex"] || {}
-    const rts = pi.riskToleranceScore || pi["riskToleranceScore"] || {}
-    const egd = pi.earlyGameDemon || pi["earlyGameDemon"] || {}
-    const v = (o, k) => (o && o[k]) ?? null
-    const sections = []
-    if (v(mce, "gamesCount") > 0) {
-      const highest = v(mce, "highestTeamDamagePercentage")
-      const pct = v(mce, "gamesMostDamagePercent")
-      const games = v(mce, "gamesMostDamageOnTeam")
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Main Character Energy</p>
-          <p class="mt-1 text-stone-300">Peak team damage: <span class="font-bold text-white">${highest != null ? `${Number(highest).toFixed(1)}%` : "—"}</span></p>
-          <p class="text-stone-400 text-sm">Most damage on team in ${pct != null ? `${Number(pct).toFixed(0)}%` : "—"} of games (${games ?? 0} games)</p>
-        </div>
-      `)
-    }
-    if (v(ggi, "avgGoldPerMin") != null || v(ggi, "gamesTopGoldPercent") != null) {
-      const gpm = v(ggi, "avgGoldPerMin")
-      const topPct = v(ggi, "gamesTopGoldPercent")
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Gold Goblin Index</p>
-          <p class="mt-1 text-stone-300">Avg gold/min: <span class="font-bold text-white">${gpm != null ? Number(gpm).toLocaleString() : "—"}</span></p>
-          <p class="text-stone-400 text-sm">Top gold on team in ${topPct != null ? `${Number(topPct).toFixed(0)}%` : "—"} of games</p>
-        </div>
-      `)
-    }
-    if (v(rts, "avgDeaths") != null || v(rts, "gamesWithZeroDeaths") != null) {
-      const avgD = v(rts, "avgDeaths")
-      const zeroD = v(rts, "gamesWithZeroDeaths")
-      const avgDead = v(rts, "avgTimeSpentDead")
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Risk Tolerance Score</p>
-          <p class="mt-1 text-stone-300">Avg deaths: <span class="font-bold text-white">${avgD != null ? Number(avgD).toFixed(1) : "—"}</span> • ${zeroD != null ? zeroD : 0} games with 0 deaths</p>
-          ${avgDead != null ? `<p class="text-stone-400 text-sm">Avg time spent dead: ${Number(avgDead).toFixed(0)}s</p>` : ""}
-        </div>
-      `)
-    }
-    if (v(egd, "avgTakedownsFirstXMinutes") != null || v(egd, "firstBloodInvolvementPercent") != null || v(egd, "avgLaneMinionsFirst10Minutes") != null) {
-      const takedowns = v(egd, "avgTakedownsFirstXMinutes")
-      const fbPct = v(egd, "firstBloodInvolvementPercent")
-      const laneMinions = v(egd, "avgLaneMinionsFirst10Minutes")
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Early Game Demon</p>
-          <p class="mt-1 text-stone-300">Avg takedowns (first 25 min): <span class="font-bold text-white">${takedowns != null ? Number(takedowns).toFixed(1) : "—"}</span></p>
-          <p class="text-stone-400 text-sm">${laneMinions != null ? `Avg CS first 10 min: ${Number(laneMinions).toFixed(1)} • ` : ""}First Blood involvement: ${fbPct != null ? `${Number(fbPct).toFixed(0)}%` : "—"} of games</p>
-        </div>
-      `)
-    }
-    if (sections.length === 0) return ""
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Playstyle Identity</p>
-      <p class="mt-2 text-lg font-bold text-white">Who you are on the Rift</p>
-      <div class="mt-6 flex flex-col gap-4">${sections.join("")}</div>
-    `
-  }
-
-  hasClutchChaosData(cc) {
-    if (!cc || typeof cc !== "object") return false
-    const v = (o, k) => (o && o[k]) ?? null
-    const oneHp = v(cc.oneHpSurvivor || cc["oneHpSurvivor"], "survivedSingleDigitHpCount")
-    const outnum = v(cc.outnumberedFighter || cc["outnumberedFighter"], "outnumberedKills")
-    const objThief = v(cc.objectiveThiefPotential || cc["objectiveThiefPotential"], "objectivesStolenPlusAssists")
-    const fb = v(cc.firstBloodMagnet || cc["firstBloodMagnet"], "firstBloodInvolvementPercent")
-    const surr = cc.surrenderStats || cc["surrenderStats"]
-    const surrPct = surr && v(surr, "surrenderGamesPercent")
-    return (oneHp != null && Number(oneHp) > 0) || (outnum != null && Number(outnum) > 0) ||
-      (objThief != null && Number(objThief) > 0) || (fb != null && Number(fb) > 0) ||
-      (surrPct != null && Number(surrPct) > 0)
-  }
-
-  cardClutchChaos(cc) {
-    const v = (o, k) => (o && o[k]) ?? null
-    const oneHp = cc.oneHpSurvivor || cc["oneHpSurvivor"] || {}
-    const outnum = cc.outnumberedFighter || cc["outnumberedFighter"] || {}
-    const objThief = cc.objectiveThiefPotential || cc["objectiveThiefPotential"] || {}
-    const fb = cc.firstBloodMagnet || cc["firstBloodMagnet"] || {}
-    const surr = cc.surrenderStats || cc["surrenderStats"] || {}
-    const sections = []
-    const hpCount = v(oneHp, "survivedSingleDigitHpCount")
-    if (hpCount != null && Number(hpCount) > 0) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">1 HP Survivor</p>
-          <p class="mt-1 text-stone-300">Survived at &lt;10 HP: <span class="font-bold text-white">${Number(hpCount).toLocaleString()}</span> times</p>
-        </div>
-      `)
-    }
-    const kills = v(outnum, "outnumberedKills")
-    if (kills != null && Number(kills) > 0) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Outnumbered Fighter</p>
-          <p class="mt-1 text-stone-300">Outnumbered kills: <span class="font-bold text-white">${Number(kills).toLocaleString()}</span></p>
-        </div>
-      `)
-    }
-    const stolen = v(objThief, "objectivesStolenPlusAssists")
-    if (stolen != null && Number(stolen) > 0) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Objective Thief Potential</p>
-          <p class="mt-1 text-stone-300">Objectives stolen + assists: <span class="font-bold text-white">${Number(stolen).toLocaleString()}</span></p>
-        </div>
-      `)
-    }
-    const fbPct = v(fb, "firstBloodInvolvementPercent")
-    if (fbPct != null && Number(fbPct) > 0) {
-      const fbGames = v(fb, "gamesFirstBloodInvolvement")
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">First Blood Magnet</p>
-          <p class="mt-1 text-stone-300">First Blood involvement: <span class="font-bold text-white">${Number(fbPct).toFixed(0)}%</span> of games${fbGames != null ? ` (${Number(fbGames)} games)` : ""}</p>
-        </div>
-      `)
-    }
-    const surrPct = v(surr, "surrenderGamesPercent")
-    if (surrPct != null && Number(surrPct) > 0) {
-      const surrGames = v(surr, "gamesEndedInSurrender")
-      const winrate = v(surr, "winrateInSurrenderGames")
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Surrender Stats</p>
-          <p class="mt-1 text-stone-300">${Number(surrPct).toFixed(0)}% of games ended in surrender${surrGames != null ? ` (${Number(surrGames)} games)` : ""}</p>
-          ${winrate != null ? `<p class="text-stone-400 text-sm">Win rate in surrender games: ${Number(winrate).toFixed(0)}%</p>` : ""}
-        </div>
-      `)
-    }
-    if (sections.length === 0) return ""
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Clutch & Chaos Moments</p>
-      <p class="mt-2 text-lg font-bold text-white">Storytelling on the Rift</p>
-      <div class="mt-6 flex flex-col gap-4">${sections.join("")}</div>
-    `
-  }
-
-  hasEconomyScalingData(es) {
-    if (!es || typeof es !== "object") return false
-    const v = (o, k) => (o && o[k]) ?? null
-    const avgDur = v(es, "avgGameDurationSeconds")
-    const winrate = es.winrateByBucket || es["winrateByBucket"]
-    const comeback = es.comebackMerchant || es["comebackMerchant"]
-    const scaling = es.scalingPickAddict || es["scalingPickAddict"]
-    return (avgDur != null && Number(avgDur) > 0) || (winrate && Object.keys(winrate).length > 0) ||
-      (comeback && ((v(comeback, "winsWithNegativeGpmVsOpponent") ?? 0) > 0 || (v(comeback, "winsAfterEarlyGoldDeficit") ?? 0) > 0)) ||
-      (scaling && (v(scaling, "scalingChampsPercent") ?? 0) > 0)
-  }
-
-  cardEconomyScaling(es) {
-    const v = (o, k) => (o && o[k]) ?? null
-    const avgSec = v(es, "avgGameDurationSeconds")
-    const winrate = es.winrateByBucket || es["winrateByBucket"] || {}
-    const gamesByBucket = es.gamesByBucket || es["gamesByBucket"] || {}
-    const comeback = es.comebackMerchant || es["comebackMerchant"] || {}
-    const scaling = es.scalingPickAddict || es["scalingPickAddict"] || {}
-    const sections = []
-    if (avgSec != null && Number(avgSec) > 0) {
-      const mins = Math.floor(Number(avgSec) / 60)
-      const secs = Number(avgSec) % 60
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Average Game Length</p>
-          <p class="mt-1 text-stone-300"><span class="font-bold text-white">${mins}:${String(secs).padStart(2, "0")}</span> (min:sec)</p>
-        </div>
-      `)
-    }
-    const bucketLabels = { under20: "<20 min", w20_30: "20–30 min", over30: "30+ min" }
-    const bucketRows = Object.entries(bucketLabels)
-      .filter(([k]) => (gamesByBucket[k] ?? 0) > 0)
-      .map(([k]) => {
-        const g = gamesByBucket[k] ?? 0
-        const wr = winrate[k] ?? 0
-        return `<span class="text-stone-300">${bucketLabels[k]}: <span class="font-bold text-white">${Number(wr).toFixed(0)}%</span> WR (${g} games)</span>`
-      })
-      .join(" • ")
-    if (bucketRows) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Winrate by Game Length</p>
-          <p class="mt-1">${bucketRows}</p>
-        </div>
-      `)
-    }
-    const gpmWins = v(comeback, "winsWithNegativeGpmVsOpponent")
-    const goldDefWins = v(comeback, "winsAfterEarlyGoldDeficit")
-    if ((gpmWins ?? 0) > 0 || (goldDefWins ?? 0) > 0) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Comeback Merchant</p>
-          <p class="mt-1 text-stone-300">Wins with lower GPM than opponents: <span class="font-bold text-white">${gpmWins ?? 0}</span></p>
-          <p class="text-stone-400 text-sm">Wins after gold deficit at 15 min: ${goldDefWins ?? 0}</p>
-        </div>
-      `)
-    }
-    const scalingPct = v(scaling, "scalingChampsPercent")
-    if (scalingPct != null && Number(scalingPct) > 0) {
-      const scalingGames = v(scaling, "gamesOnScalingChamps")
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Scaling Pick Addict</p>
-          <p class="mt-1 text-stone-300"><span class="font-bold text-white">${Number(scalingPct).toFixed(0)}%</span> of games on late-scaling champs${scalingGames != null ? ` (${Number(scalingGames)} games)` : ""}</p>
-        </div>
-      `)
-    }
-    if (sections.length === 0) return ""
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Economy & Scaling</p>
-      <p class="mt-2 text-lg font-bold text-white">Long-term Patterns</p>
-      <div class="mt-6 flex flex-col gap-4">${sections.join("")}</div>
-    `
-  }
-
-  hasChampionPersonalityData(cp) {
-    if (!cp || typeof cp !== "object") return false
-    const v = (o, k) => (o && o[k]) ?? null
-    const mostPlayed = cp.mostPlayedChampion || cp["mostPlayedChampion"]
-    const oneTrick = v(cp, "oneTrickScore")
-    return (mostPlayed && (mostPlayed.games ?? mostPlayed["games"]) > 0) || (oneTrick != null && Number(oneTrick) > 0)
-  }
-
   championIconUrl(champ, ddragonBase, cdragonBase) {
     if (!champ) return ""
     const key = champ.key ?? champ["key"]
@@ -1458,282 +1219,6 @@ export default class extends Controller {
       return `${cdragonBase}/${numId}.png`
     }
     return ""
-  }
-
-  cardChampionPersonality(cp, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON, champNames = {}) {
-    const v = (o, k) => (o && o[k]) ?? null
-    const champName = (c) => {
-      const id = c?.championId ?? c?.["championId"]
-      return c?.name ?? c?.["name"] ?? champNames[String(id)] ?? (id != null ? `Champ ${id}` : "")
-    }
-    const champImg = (c) => {
-      if (!c) return ""
-      const url = this.championIconUrl(c, CHAMP_IMG_DDRAGON, CHAMP_IMG_CDRAGON)
-      if (!url) return ""
-      return `<img src="${escapeHtml(url)}" alt="" class="h-12 w-12 rounded-full shrink-0" onerror="this.style.display='none'">`
-    }
-    const sections = []
-    const mostPlayed = cp.mostPlayedChampion || cp["mostPlayedChampion"]
-    if (mostPlayed && (mostPlayed.games ?? mostPlayed["games"]) > 0) {
-      const name = escapeHtml(champName(mostPlayed))
-      const games = mostPlayed.games ?? mostPlayed["games"]
-      const winrate = mostPlayed.winrate ?? mostPlayed["winrate"]
-      sections.push(`
-        <div class="text-left flex items-center gap-3">
-          ${champImg(mostPlayed)}
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Most Played Champion</p>
-            <p class="mt-1 text-stone-300"><span class="font-bold text-white">${name}</span> – ${games} games${winrate != null ? `, ${Number(winrate).toFixed(0)}% WR` : ""}</p>
-          </div>
-        </div>
-      `)
-    }
-    const highestWr = cp.highestWinrateChampion || cp["highestWinrateChampion"]
-    if (highestWr && highestWr !== mostPlayed) {
-      const name = escapeHtml(champName(highestWr))
-      const wr = highestWr.winrate ?? highestWr["winrate"]
-      const games = highestWr.games ?? highestWr["games"]
-      sections.push(`
-        <div class="text-left flex items-center gap-3">
-          ${champImg(highestWr)}
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Highest Winrate Champion</p>
-            <p class="mt-1 text-stone-300"><span class="font-bold text-white">${name}</span> – ${Number(wr).toFixed(0)}% WR (${games} games)</p>
-          </div>
-        </div>
-      `)
-    }
-    const whyPick = cp.whyDoYouKeepPickingThis || cp["whyDoYouKeepPickingThis"]
-    if (whyPick) {
-      const name = escapeHtml(champName(whyPick))
-      const wr = whyPick.winrate ?? whyPick["winrate"]
-      const games = whyPick.games ?? whyPick["games"]
-      sections.push(`
-        <div class="text-left flex items-center gap-3">
-          ${champImg(whyPick)}
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-red-400/90">Why Do You Keep Picking This?</p>
-            <p class="mt-1 text-stone-300"><span class="font-bold text-red-400">${name}</span> – ${games} games at ${Number(wr).toFixed(0)}% WR</p>
-          </div>
-        </div>
-      `)
-    }
-    const oneTrick = v(cp, "oneTrickScore")
-    if (oneTrick != null && Number(oneTrick) > 0) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">One Trick Score</p>
-          <p class="mt-1 text-stone-300"><span class="font-bold text-white">${Number(oneTrick).toFixed(0)}%</span> of games on your most played champion</p>
-        </div>
-      `)
-    }
-    if (sections.length === 0) return ""
-    return `
-      <p class="text-3xl font-bold uppercase tracking-widest text-white">Champion Personality</p>
-      <div class="mt-6 flex flex-col gap-4">${sections.join("")}</div>
-    `
-  }
-
-  hasVisionMapIqData(vm) {
-    if (!vm || typeof vm !== "object") return false
-    const v = (o, k) => (o && o[k]) ?? null
-    return (v(vm, "visionScorePerMinAvg") != null && Number(v(vm, "visionScorePerMinAvg")) > 0) ||
-      (v(vm, "controlWardsPlacedPerGame") != null && Number(v(vm, "controlWardsPlacedPerGame")) >= 0) ||
-      (v(vm, "wardTakedownsPerGame") != null && Number(v(vm, "wardTakedownsPerGame")) > 0) ||
-      (vm.mapAwarenessScore && ((v(vm.mapAwarenessScore, "enemyMissingPingsUsed") ?? 0) > 0 || (v(vm.mapAwarenessScore, "visionScoreAdvantageLaneOpponentAvg") != null)))
-  }
-
-  cardVisionMapIq(vm) {
-    const v = (o, k) => (o && o[k]) ?? null
-    const mapAwareness = vm.mapAwarenessScore || vm["mapAwarenessScore"] || {}
-    const sections = []
-    const vsPerMin = v(vm, "visionScorePerMinAvg")
-    if (vsPerMin != null && Number(vsPerMin) >= 0) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Vision Score Per Minute</p>
-          <p class="mt-1 text-stone-300">Average: <span class="font-bold text-white">${Number(vsPerMin).toFixed(2)}</span></p>
-        </div>
-      `)
-    }
-    const ctrlWards = v(vm, "controlWardsPlacedPerGame")
-    if (ctrlWards != null) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Control Wards</p>
-          <p class="mt-1 text-stone-300"><span class="font-bold text-white">${Number(ctrlWards).toFixed(1)}</span> per game</p>
-        </div>
-      `)
-    }
-    const wardTakedowns = v(vm, "wardTakedownsPerGame")
-    if (wardTakedowns != null && Number(wardTakedowns) > 0) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Ward Takedowns</p>
-          <p class="mt-1 text-stone-300"><span class="font-bold text-white">${Number(wardTakedowns).toFixed(1)}</span> per game</p>
-        </div>
-      `)
-    }
-    const enemyMissing = v(mapAwareness, "enemyMissingPingsUsed")
-    const vsAdvantage = v(mapAwareness, "visionScoreAdvantageLaneOpponentAvg")
-    if ((enemyMissing != null && Number(enemyMissing) >= 0) || vsAdvantage != null) {
-      const parts = []
-      if (enemyMissing != null) parts.push(`Enemy Missing pings: <span class="font-bold text-white">${Number(enemyMissing).toLocaleString()}</span>`)
-      if (vsAdvantage != null) parts.push(`Vision advantage vs lane: <span class="font-bold text-white">${Number(vsAdvantage).toFixed(1)}</span> avg`)
-      if (parts.length > 0) {
-        sections.push(`
-          <div class="text-left">
-            <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Map Awareness Score</p>
-            <p class="mt-1 text-stone-300">${parts.join(" • ")}</p>
-          </div>
-        `)
-      }
-    }
-    if (sections.length === 0) return ""
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Vision & Map IQ</p>
-      <p class="mt-2 text-lg font-bold text-white">Often overlooked but cool</p>
-      <div class="mt-6 flex flex-col gap-4">${sections.join("")}</div>
-    `
-  }
-
-  hasDamageProfileData(dp) {
-    if (!dp || typeof dp !== "object") return false
-    const split = dp.damageSplitPersonality || dp["damageSplitPersonality"]
-    const tank = dp.tankVsGlassCannon || dp["tankVsGlassCannon"]
-    const dps = dp.dpsMonster || dp["dpsMonster"]
-    const v = (o, k) => (o && o[k]) ?? null
-    return (split && (v(split, "physicalPercent") != null || v(split, "magicPercent") != null)) ||
-      (tank && (v(tank, "damageTakenOnTeamPercentageAvg") != null || (v(tank, "damageSelfMitigatedTotal") ?? 0) > 0)) ||
-      (dps && (v(dps, "damagePerMinutePeak") != null || v(dps, "damagePerMinuteAvg") != null))
-  }
-
-  cardDamageProfile(dp) {
-    const v = (o, k) => (o && o[k]) ?? null
-    const split = dp.damageSplitPersonality || dp["damageSplitPersonality"] || {}
-    const tank = dp.tankVsGlassCannon || dp["tankVsGlassCannon"] || {}
-    const dps = dp.dpsMonster || dp["dpsMonster"] || {}
-    const sections = []
-    const phys = v(split, "physicalPercent")
-    const magic = v(split, "magicPercent")
-    const truePct = v(split, "truePercent")
-    if ((phys != null || magic != null) && (Number(phys ?? 0) + Number(magic ?? 0) + Number(truePct ?? 0)) > 0) {
-      const clamp = (n) => Math.min(100, Math.max(0, Number(n) || 0))
-      const physW = clamp(phys ?? 0)
-      const magicW = clamp(magic ?? 0)
-      const trueW = clamp(truePct ?? 0)
-      const parts = []
-      if (physW > 0) parts.push({ flex: physW, color: "bg-red-500" })
-      if (magicW > 0) parts.push({ flex: magicW, color: "bg-blue-500" })
-      if (trueW > 0) parts.push({ flex: trueW, color: "bg-white" })
-      const segmentHtml = parts.map((p, i) => {
-        const first = i === 0
-        const last = i === parts.length - 1
-        const rounding = first && last ? " rounded" : first ? " rounded-l" : last ? " rounded-r" : ""
-        return `<div class="min-w-0 shrink-0 ${escapeHtml(p.color)}${escapeHtml(rounding)}" style="flex:${p.flex} 0 0"></div>`
-      }).join("")
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Damage Split Personality</p>
-          <div class="mt-2 flex h-4 w-full overflow-hidden rounded bg-stone-700">
-            ${segmentHtml}
-          </div>
-          <p class="mt-1 text-stone-400 text-sm">Physical ${Number(phys ?? 0).toFixed(0)}% • Magic ${Number(magic ?? 0).toFixed(0)}% • True ${Number(truePct ?? 0).toFixed(0)}%</p>
-        </div>
-      `)
-    }
-    const dmgTakenPct = v(tank, "damageTakenOnTeamPercentageAvg")
-    const selfMitigated = v(tank, "damageSelfMitigatedTotal")
-    if (dmgTakenPct != null || (selfMitigated != null && Number(selfMitigated) > 0)) {
-      const tankParts = []
-      if (dmgTakenPct != null) tankParts.push(`Damage taken on team: <span class="font-bold text-white">${Number(dmgTakenPct).toFixed(1)}%</span> avg`)
-      if (selfMitigated != null && Number(selfMitigated) > 0) tankParts.push(`Self-mitigated: <span class="font-bold text-white">${Number(selfMitigated).toLocaleString()}</span>`)
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Tank vs Glass Cannon</p>
-          <p class="mt-1 text-stone-300">${tankParts.join(" • ")}</p>
-        </div>
-      `)
-    }
-    const dpmPeak = v(dps, "damagePerMinutePeak")
-    const dpmAvg = v(dps, "damagePerMinuteAvg")
-    if (dpmPeak != null || dpmAvg != null) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">DPS Monster</p>
-          <p class="mt-1 text-stone-300">Peak DPM: <span class="font-bold text-white">${dpmPeak != null ? Number(dpmPeak).toLocaleString() : "—"}</span> • Avg DPM: <span class="font-bold text-white">${dpmAvg != null ? Number(dpmAvg).toLocaleString() : "—"}</span></p>
-        </div>
-      `)
-    }
-    if (sections.length === 0) return ""
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Damage Profile</p>
-      <p class="mt-2 text-lg font-bold text-white">Visually strong in recap slides</p>
-      <div class="mt-6 flex flex-col gap-4">${sections.join("")}</div>
-    `
-  }
-
-  hasBotLaneSynergyData(bls) {
-    if (!bls || typeof bls !== "object") return false
-    const duos = bls.topDuos || bls["topDuos"] || []
-    const rideOrDie = bls.rideOrDie || bls["rideOrDie"]
-    return (Array.isArray(duos) && duos.length > 0) || (rideOrDie && (rideOrDie.games ?? rideOrDie["games"]) > 0)
-  }
-
-  cardBotLaneSynergy(bls) {
-    const v = (o, k) => (o && o[k]) ?? null
-    const duos = bls.topDuos || bls["topDuos"] || []
-    const rideOrDie = bls.rideOrDie || bls["rideOrDie"]
-    const sections = []
-    if (rideOrDie && (v(rideOrDie, "games") ?? 0) > 0) {
-      const name = escapeHtml(v(rideOrDie, "teammateName") || v(rideOrDie, "teammateRiotId") || "Your Duo")
-      const games = v(rideOrDie, "games")
-      const winrate = v(rideOrDie, "winrate")
-      const kp = v(rideOrDie, "killParticipation")
-      const pct = v(rideOrDie, "pctOfTotalGames")
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Ride or Die</p>
-          <p class="mt-1 text-2xl font-bold text-white">${name}</p>
-          <p class="mt-2 text-stone-300">${games} games together • ${winrate != null ? `${Number(winrate).toFixed(0)}%` : "—"} winrate${kp != null ? ` • ${Number(kp).toFixed(0)}%` : ""} KP when together${pct != null ? `<br><span class="text-stone-400 text-sm">${Number(pct).toFixed(0)}% of your games were with them</span>` : ""}</p>
-        </div>
-      `)
-    }
-    const otherDuos = duos.slice(1).filter((d) => (v(d, "games") ?? 0) > 0)
-    if (otherDuos.length > 0) {
-      sections.push(`
-        <div class="text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-white/90">Top Duos</p>
-          <div class="mt-2 space-y-1">
-            ${otherDuos.slice(0, 4).map((d) => {
-              const name = escapeHtml(v(d, "teammateName") || v(d, "teammateRiotId") || "Unknown")
-              const g = v(d, "games")
-              const wr = v(d, "winrate")
-              const kp = v(d, "killParticipation")
-              const pct = v(d, "pctOfTotalGames")
-              return `<p class="text-stone-300">${name}: ${g} games, ${wr != null ? `${Number(wr).toFixed(0)}%` : "—"} WR${kp != null ? `, ${Number(kp).toFixed(0)}% KP` : ""}${pct != null ? ` (${Number(pct).toFixed(0)}% of yours)` : ""}</p>`
-            }).join("")}
-          </div>
-        </div>
-      `)
-    }
-    if (sections.length === 0) return ""
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Bot Lane Synergy</p>
-      <p class="mt-2 text-lg font-bold text-white">Your ride or die</p>
-      <div class="mt-6 flex flex-col gap-4">${sections.join("")}</div>
-    `
-  }
-
-  cardMemeTitles(titles) {
-    if (!Array.isArray(titles) || titles.length === 0) return ""
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Your Meme Titles</p>
-      <p class="mt-2 text-lg font-bold text-white">Fun, meme-able titles</p>
-      <div class="mt-6 flex flex-wrap justify-center gap-2">
-        ${titles.map((t) => `<span class="rounded-full bg-stone-500/30 px-4 py-2 text-sm font-semibold text-white">${escapeHtml(t)}</span>`).join("")}
-      </div>
-    `
   }
 
   cardFriendsAndFoes(list, enemies) {
@@ -1771,7 +1256,7 @@ export default class extends Controller {
           <p class="text-stone-500">No data</p>
         </div>`
     return `
-      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-stone-500">Friends and foes</p>
+      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-white">Friends and foes</p>
       <div class="grid w-full max-w-2xl grid-cols-1 gap-8 md:grid-cols-2 md:gap-12">
         ${friendsHtml}
         ${foesHtml}
@@ -1780,20 +1265,79 @@ export default class extends Controller {
   }
 
   cardItems(favItems, itemNames = {}, ITEM_IMG_BASE) {
-    const items = favItems.filter((item) => item && ((item.item_id ?? item.itemId) != null)).slice(0, 5)
-    const itemName = (item) => {
-      const id = item.item_id ?? item.itemId
-      return item.name ?? item["name"] ?? itemNames[String(id)] ?? `Item ${id}`
-    }
+    const items = favItems.filter((item) => item && ((item.item_id ?? item.itemId) != null)).slice(0, 8)
     return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Top 5 items built</p>
-      <div class="mt-6 flex flex-wrap justify-center gap-4">
+      <p class="text-xs font-medium uppercase tracking-widest text-white">Top 8 items built</p>
+      <div class="mt-6 grid grid-cols-4 gap-4">
         ${items.map((item) => {
           const id = safeUrlSegment(item.item_id ?? item.itemId)
-          const name = escapeHtml(itemName(item))
           const count = item.count ?? 0
-          return `<div class="flex flex-col items-center"><img src="${ITEM_IMG_BASE}/${id}.png" alt="${name}" class="h-14 w-14 rounded" onerror="this.style.display='none'"><span class="mt-2 text-sm text-stone-300">${name}</span><span class="text-white font-semibold">${safeDisplay(count)} games</span></div>`
+          return `<div class="flex flex-col items-center"><img src="${ITEM_IMG_BASE}/${id}.png" alt="" class="h-14 w-14 rounded" onerror="this.style.display='none'"><span class="mt-2 text-white font-semibold">${safeDisplay(count)} games</span></div>`
         }).join("")}
+      </div>
+    `
+  }
+
+  cardPings(pingBreakdown, totalPings) {
+    const raw = pingBreakdown || {}
+    const merged = { ...raw }
+    const getBack = (Number(merged.getBackPings) || 0) + (Number(merged.retreatPings) || 0)
+    if (getBack > 0) {
+      merged.getBackPings = getBack
+      delete merged.retreatPings
+    }
+    const entries = Object.entries(merged)
+      .filter(([, count]) => (Number(count) || 0) > 0)
+      .map(([key, count]) => ({ key, count: Number(count) }))
+      .sort((a, b) => b.count - a.count)
+    if (entries.length === 0) return ""
+    const cells = Array.from({ length: 10 }, (_, i) => {
+      const entry = entries[i]
+      if (!entry) {
+        return `<div class="flex flex-col items-center justify-center gap-1 rounded-xl p-4 min-h-[100px] aspect-square"></div>`
+      }
+      const { key, count } = entry
+      const label = pingKeyToLabel(key)
+      const iconUrl = PING_ICON_URLS[key]
+      const iconHtml = iconUrl
+        ? `<img src="${escapeHtml(iconUrl)}" alt="" class="h-12 w-12 shrink-0 object-contain" onerror="this.style.display='none';this.nextElementSibling?.classList.remove('hidden')">
+          <span class="hidden flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#22d3ee]/20 text-lg font-bold text-white">${escapeHtml(String(label.charAt(0)))}</span>`
+        : `<span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#22d3ee]/20 text-lg font-bold text-white">${escapeHtml(String(label.charAt(0)))}</span>`
+      return `<div class="flex flex-col items-center justify-center gap-2 rounded-xl p-4 min-h-[100px] aspect-square" title="${escapeHtml(label)}">
+        <div class="flex flex-col items-center gap-1">
+          <div class="flex items-center justify-center">${iconHtml}</div>
+          <span class="text-center text-xs font-medium text-white leading-tight">${escapeHtml(label)}</span>
+        </div>
+        <span class="font-beaufort text-2xl font-bold tabular-nums text-white">${escapeHtml(String(count))}</span>
+      </div>`
+    })
+    return `
+      <p class="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-white">Your Pings</p>
+      <div class="flex flex-col items-center gap-6">
+        <p class="font-beaufort text-5xl sm:text-6xl font-bold tabular-nums tracking-tight text-white">
+          <span class="text-white">${escapeHtml(String(totalPings))}</span>
+          <span class="text-lg sm:text-xl font-medium text-white ml-1">total pings</span>
+        </p>
+        <div class="flex w-full max-w-2xl flex-col items-center gap-4">
+          <div class="grid w-full grid-cols-4 gap-3 sm:gap-4">${cells.slice(0, 4).join("")}</div>
+          <div class="grid w-full grid-cols-4 gap-3 sm:gap-4">${cells.slice(4, 8).join("")}</div>
+          <div class="grid w-full grid-cols-4 gap-3 sm:gap-4">${cells.slice(8, 10).join("")}</div>
+        </div>
+      </div>
+    `
+  }
+
+  cardThankYou() {
+    const homeUrl = "/"
+    return `
+      <div class="flex flex-col items-center gap-8">
+        <p class="font-beaufort text-4xl sm:text-5xl font-bold tracking-tight text-white">Thank you</p>
+        <p class="text-stone-400 text-center max-w-sm">Thanks for using LoL Wrapped. If you enjoyed it, consider supporting development.</p>
+        <a href="https://ko-fi.com/ethancodes" target="_blank" rel="noopener noreferrer" class="group inline-flex items-center gap-3 rounded-lg bg-white px-6 py-3 text-black font-medium ring-1 ring-stone-800 transition-all duration-300 hover:scale-105 hover:-translate-y-1 hover:bg-white hover:shadow-[0_8px_30px_rgba(255,255,255,0.25)] hover:ring-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-stone-950">
+          <img src="/Ko-fi_HEART.gif" alt="" class="h-12 w-12 object-contain transition-transform duration-300 group-hover:scale-110">
+          <span class="transition-transform duration-300 group-hover:translate-x-0.5">Support on Ko-fi</span>
+        </a>
+        <a href="${escapeHtml(homeUrl)}" class="text-sm text-stone-500 hover:text-white transition-colors">Take me back home</a>
       </div>
     `
   }
@@ -1807,7 +1351,7 @@ export default class extends Controller {
     }
     const banName = (b) => b.name ?? b["name"] ?? champNames[String(b.champion_id ?? b.championId ?? "")] ?? `Champ ${b.champion_id ?? b.championId ?? ""}`
     return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Top 5 bans</p>
+      <p class="text-xs font-medium uppercase tracking-widest text-white">Top 5 bans</p>
       <div class="mt-6 grid grid-cols-2 gap-6">
         <div>
           <p class="mb-2 text-xs text-stone-500">Your team</p>
@@ -1833,34 +1377,6 @@ export default class extends Controller {
     `
   }
 
-  cardPings(totalPings, pingBreakdown) {
-    const entries = Object.entries(pingBreakdown)
-      .filter(([, count]) => Number(count) > 0)
-      .sort((a, b) => Number(b[1]) - Number(a[1]))
-    const topType = entries[0]
-    const topLabel = topType ? this.pingLabel(topType[0]) : "Pings"
-    const topCount = topType ? Number(topType[1]) : 0
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Pings used</p>
-      <p class="mt-4 text-5xl font-bold text-white">${Number(totalPings).toLocaleString()}</p>
-      <p class="mt-2 text-stone-500">total • most used: <span class="text-stone-300">${escapeHtml(topLabel)}</span> (${topCount.toLocaleString()})</p>
-    `
-  }
-
-  cardExtra(extraEntries) {
-    const top2 = extraEntries.slice(0, 2)
-    return `
-      <p class="text-xs font-medium uppercase tracking-widest text-stone-500">Combat highlights</p>
-      <div class="mt-6 space-y-4">
-        ${top2.map(([key, val]) => {
-          const label = escapeHtml(this.extraStatLabel(key))
-          const value = escapeHtml(this.formatExtraStatValue(key, val))
-          return `<div><span class="text-stone-400">${label}</span><br><span class="text-2xl font-bold text-white">${value}</span></div>`
-        }).join("")}
-      </div>
-    `
-  }
-
   closeWrapped() {
     if (this.backUrlValue) {
       window.location = this.backUrlValue
@@ -1878,7 +1394,8 @@ export default class extends Controller {
   showMessage(text, type) {
     if (!this.hasMessageTarget) return
     this.messageTarget.textContent = text
-    this.messageTarget.className = "text-sm " + (type === "success" ? "text-white" : type === "error" ? "text-red-400" : "text-stone-400")
+    this.messageTarget.classList.remove("text-white", "text-red-400", "text-stone-400")
+    this.messageTarget.classList.add(type === "success" ? "text-white" : type === "error" ? "text-red-400" : "text-stone-400")
     this.messageTarget.classList.toggle("hidden", !text)
   }
 

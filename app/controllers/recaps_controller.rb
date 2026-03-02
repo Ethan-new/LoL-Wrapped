@@ -88,6 +88,7 @@ class RecapsController < ApplicationController
       total_kills: year_stat&.total_kills || 0,
       total_deaths: year_stat&.total_deaths || 0,
       total_assists: year_stat&.total_assists || 0,
+      total_time_spent_dead: year_stat&.total_time_spent_dead || 0,
       fav_items: fav_items,
       extra_stats: extra_stats,
       our_team_bans: our_team_bans,
@@ -158,6 +159,22 @@ class RecapsController < ApplicationController
         wi[key] = entry.merge("name" => info["name"], "key" => info["key"])
       end
       result["winrateInsights"] = wi
+    end
+
+    mk = result["multiKills"] || result[:multiKills]
+    if mk.present?
+      mk = mk.with_indifferent_access if mk.respond_to?(:with_indifferent_access)
+      by_champ = mk["byChampion"] || mk[:byChampion]
+      if by_champ.present?
+        by_champ = Array(by_champ).map do |entry|
+          next if entry.blank?
+          e = entry.with_indifferent_access if entry.respond_to?(:with_indifferent_access)
+          cid = (e["championId"] || e[:championId]).to_s
+          info = champ_data[cid] || {}
+          (e || entry).merge("name" => info["name"], "key" => info["key"])
+        end.compact
+        result["multiKills"] = (result["multiKills"] || {}).merge("byChampion" => by_champ)
+      end
     end
 
     result

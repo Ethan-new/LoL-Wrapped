@@ -5,8 +5,14 @@ export default class extends Controller {
   static targets = ["video", "icon"]
 
   connect() {
-    this.videoTarget.addEventListener("play", () => this.updateIcon())
+    this.videoTarget.addEventListener("play", () => {
+      this.videoTarget.classList.remove("hero-video-pulse")
+      this.updateIcon()
+    })
     this.videoTarget.addEventListener("pause", () => this.updateIcon())
+    if (!this.videoTarget.paused || this.videoTarget.readyState >= 2) {
+      this.videoTarget.classList.remove("hero-video-pulse")
+    }
     this.updateIcon()
   }
 

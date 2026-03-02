@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_25_212521) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_01_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -61,6 +61,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_25_212521) do
     t.bigint "total_gold_spent", default: 0, null: false
     t.bigint "total_kills", default: 0, null: false
     t.integer "total_pings", default: 0, null: false
+    t.bigint "total_time_spent_dead", default: 0, null: false
     t.datetime "updated_at", null: false
     t.integer "year", null: false
     t.index ["player_id", "year"], name: "index_recap_year_stats_on_player_id_and_year", unique: true

@@ -153,8 +153,10 @@ class PlayersController < ApplicationController
       player = find_or_create_player(account_data)
     end
 
-    # Instantly refresh profile when data is stale (never synced or older than 1 hour)
-    if player && (player.last_synced_at.nil? || player.last_synced_at < 1.hour.ago)
+    # Instantly refresh profile when data is stale (never synced or older than 1 hour).
+    # Skip if within 300-second cooldown (matches Refresh profile button).
+    recently_synced = player.last_synced_at && player.last_synced_at > 5.minutes.ago
+    if player && !recently_synced && (player.last_synced_at.nil? || player.last_synced_at < 1.hour.ago)
       begin
         refresh_player_data(player)
       rescue RiotClient::NotFound, RiotClient::ApiError
@@ -174,7 +176,7 @@ class PlayersController < ApplicationController
   private
 
   def lookup_params
-    params.permit(:game_name, :tag_line, :riot_id, :region)
+    params.permit(:game_name, :tag_line, :riot_id, :region, :authenticity_token, :button)
   end
 
   def valid_params?
