@@ -11,22 +11,45 @@ export default class extends Controller {
 
   connect() {
     this.animated = false
+    this.boundCheckVisibility = () => this.checkAndAnimate()
     this.observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && !this.animated) {
-            this.animated = true
-            this.animateAll()
+            this.animateNow()
           }
         })
       },
       { threshold: 0.3 }
     )
     this.observer.observe(this.element)
+    window.addEventListener("scroll", this.boundCheckVisibility, { passive: true })
+    window.addEventListener("resize", this.boundCheckVisibility)
+    requestAnimationFrame(() => this.checkAndAnimate())
   }
 
   disconnect() {
     this.observer?.disconnect()
+    window.removeEventListener("scroll", this.boundCheckVisibility)
+    window.removeEventListener("resize", this.boundCheckVisibility)
+  }
+
+  checkAndAnimate() {
+    if (this.animated) return
+    const rect = this.element.getBoundingClientRect()
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+    const visible = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0)
+    const ratio = rect.height > 0 ? visible / rect.height : 0
+    if (ratio >= 0.15) this.animateNow()
+  }
+
+  animateNow() {
+    if (this.animated) return
+    this.animated = true
+    this.observer?.disconnect()
+    window.removeEventListener("scroll", this.boundCheckVisibility)
+    window.removeEventListener("resize", this.boundCheckVisibility)
+    this.animateAll()
   }
 
   animateAll() {
