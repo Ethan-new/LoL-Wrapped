@@ -39,15 +39,15 @@
     </div>
     <div class="flex w-full flex-wrap justify-center gap-8 gap-y-4 text-center" data-controller="counter">
       <div>
-        <p data-counter-target="number" data-counter-value="<%= @total_matches %>" class="text-2xl font-bold tabular-nums text-white">0</p>
+        <p data-counter-target="number" data-counter-value="<%= @total_matches %>" class="text-2xl font-bold tabular-nums text-white"><%= number_with_delimiter(@total_matches) %></p>
         <p class="text-sm text-zinc-500">Matches stored</p>
       </div>
       <div>
-        <p data-counter-target="number" data-counter-value="<%= @total_players %>" class="text-2xl font-bold tabular-nums text-blue-400">0</p>
+        <p data-counter-target="number" data-counter-value="<%= @total_players %>" class="text-2xl font-bold tabular-nums text-blue-400"><%= number_with_delimiter(@total_players) %></p>
         <p class="text-sm text-zinc-500">Summoners stored</p>
       </div>
       <div>
-        <p data-counter-target="number" data-counter-value="<%= @total_recaps %>" class="text-2xl font-bold tabular-nums text-emerald-400">0</p>
+        <p data-counter-target="number" data-counter-value="<%= @total_recaps %>" class="text-2xl font-bold tabular-nums text-emerald-400"><%= number_with_delimiter(@total_recaps) %></p>
         <p class="text-sm text-zinc-500">Recaps generated</p>
       </div>
     </div>

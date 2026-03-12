@@ -4,6 +4,8 @@ class PlayersController < ApplicationController
   skip_before_action :allow_browser, if: -> { request.format.json? }, raise: false
 
   def index
+    # Homepage totals change often; avoid stale cached HTML showing outdated placeholders.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     @total_matches = Match.count
     @total_players = Player.count
     @total_recaps = RecapYearStat.count

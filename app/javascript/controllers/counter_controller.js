@@ -54,8 +54,11 @@ export default class extends Controller {
 
   animateAll() {
     this.numberTargets.forEach((target) => {
-      const value = parseInt(target.dataset.counterValue || "0", 10)
-      this.animateValue(target, 0, value)
+      const end = parseInt(target.dataset.counterValue || "0", 10)
+      const currentText = (target.textContent || "").replace(/,/g, "").trim()
+      const start = parseInt(currentText || "0", 10)
+      if (Number.isNaN(end)) return
+      this.animateValue(target, Number.isNaN(start) ? 0 : start, end)
     })
   }
 
