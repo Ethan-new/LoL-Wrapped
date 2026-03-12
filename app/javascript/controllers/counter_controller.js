@@ -5,7 +5,7 @@ import { Controller } from "@hotwired/stimulus"
 export default class extends Controller {
   static targets = ["number"]
   static values = {
-    duration: { type: Number, default: 1500 },
+    duration: { type: Number, default: 1800 },
     decimals: { type: Number, default: 0 }
   }
 
@@ -67,8 +67,8 @@ export default class extends Controller {
     const update = (currentTime) => {
       const elapsed = currentTime - startTime
       const progress = Math.min(elapsed / this.durationValue, 1)
-      // ease-out expo - slowest near the end
-      const eased = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress)
+      // Ease-out quint: fast at the beginning, then slows down near the end.
+      const eased = 1 - Math.pow(1 - progress, 5)
       const current = Math.floor(start + (end - start) * eased)
       element.textContent = current.toLocaleString()
 
