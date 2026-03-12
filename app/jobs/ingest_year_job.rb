@@ -52,10 +52,10 @@ class IngestYearJob < ApplicationJob
           match_data = riot_client.fetch_match(match_uid: match_uid, region: region)
           sleep(MATCH_FETCH_DELAY_SECONDS)
           game_start_ms = match_data.dig(:info, :gameStartTimestamp)
-          game_start = game_start_ms ? Time.at(game_start_ms / 1000.0).utc : nil
+          game_start = (game_start_ms && game_start_ms > 0) ? Time.at(game_start_ms / 1000.0).utc : nil
 
           unless game_start
-            Rails.logger.warn "[IngestYearJob] No gameStartTimestamp for match #{match_uid}"
+            Rails.logger.warn "[IngestYearJob] No/invalid gameStartTimestamp for match #{match_uid} (got #{game_start_ms.inspect}), skipping"
             next
           end
 
