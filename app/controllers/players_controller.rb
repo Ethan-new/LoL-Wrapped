@@ -261,6 +261,8 @@ class PlayersController < ApplicationController
     rank_entries = fetch_rank_entries_by_puuid(puuid, riot_region, platform: platform)
 
     Player.find_or_initialize_by(puuid: puuid).tap do |player|
+      region_changed = player.persisted? && player.region != riot_region
+
       player.riot_id = riot_id
       player.region = riot_region
       if summoner_data
@@ -271,6 +273,20 @@ class PlayersController < ApplicationController
       end
       player.rank_entries = rank_entries
       player.last_synced_at = Time.current # Fresh data from Riot; skip redundant refresh on same request
+
+      if region_changed
+        # Only clear recap data if it's empty (generated from the wrong region with 0 games).
+        # Guard: never wipe a recap that has real game data — protects against anyone searching
+        # another player under a wrong region and accidentally/maliciously clearing their stats.
+        year = Time.current.year - 1
+        stale_recap = player.recap_year_stats.find_by(year: year)
+        if stale_recap.nil? || stale_recap.total_game_seconds.to_i == 0
+          player.recap_year_stats.destroy_all
+          player.recap_statuses = {}
+          player.year_match_ids = {}
+        end
+      end
+
       player.save!
     end
   end
