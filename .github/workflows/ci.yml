@@ -82,6 +82,8 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Default command_timeout is 10m; docker compose build + bundle install on a small VPS often exceeds it.
+          command_timeout: 45m
           script: |
             cd ~/LoL-Wrapped
             git pull origin main
