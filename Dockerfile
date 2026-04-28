@@ -30,20 +30,22 @@ RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y build-essential git libpq-dev libyaml-dev pkg-config && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
-# Install application gems
+# Install application gems (pin Bundler to Gemfile.lock BUNDLED WITH — skips image default reinstalling Bundler)
 COPY Gemfile Gemfile.lock ./
-RUN bundle install && \
+ARG BUNDLER_VERSION=2.4.19
+RUN gem install bundler -v ${BUNDLER_VERSION} && \
+    bundle _${BUNDLER_VERSION}_ install && \
     rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
-    bundle exec bootsnap precompile --gemfile
+    bundle _${BUNDLER_VERSION}_ exec bootsnap precompile --gemfile
 
 # Copy application code
 COPY . .
 
 # Precompile bootsnap code for faster boot times
-RUN bundle exec bootsnap precompile app/ lib/
+RUN bundle _${BUNDLER_VERSION}_ exec bootsnap precompile app/ lib/
 
 # Precompiling assets for production without requiring secret RAILS_MASTER_KEY
-RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
+RUN SECRET_KEY_BASE_DUMMY=1 bundle _${BUNDLER_VERSION}_ exec ./bin/rails assets:precompile
 
 
 
