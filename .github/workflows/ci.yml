@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   dco:
@@ -73,7 +73,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [ scan_ruby, scan_js, lint ]
+    needs: [scan_ruby, scan_js, lint]
 
     steps:
       - name: Deploy to server
@@ -82,8 +82,8 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          # Default command_timeout is 10m; docker compose build + bundle install on a small VPS often exceeds it.
-          command_timeout: 45m
+          # ssh-action default command_timeout is 10m — insufficient for docker compose build on a small VPS.
+          command_timeout: 60m
           script: |
             cd ~/LoL-Wrapped
             git pull origin main
@@ -91,4 +91,3 @@ jobs:
             docker compose -f docker-compose.prod.yml stop web sidekiq_ingest sidekiq_compute || true
             docker compose -f docker-compose.prod.yml rm -f web sidekiq_ingest sidekiq_compute || true
             docker compose -f docker-compose.prod.yml --env-file .env up -d
-
