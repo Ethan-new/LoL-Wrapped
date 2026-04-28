@@ -42,6 +42,9 @@ services:
       DATABASE_URL: postgres://app:${APP_DATABASE_PASSWORD}@postgres:5432/app_production
       REDIS_URL: redis://redis:6379/0
       RIOT_API_KEY: ${RIOT_API_KEY}
+      # From .env via compose — not passed through unless listed here.
+      APP_HOST: ${APP_HOST}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
       FORCE_SSL: ${FORCE_SSL:-false}
       SIDEKIQ_USER: ${SIDEKIQ_USER:-}
       SIDEKIQ_PASSWORD: ${SIDEKIQ_PASSWORD:-}
@@ -62,6 +65,8 @@ services:
       DATABASE_URL: postgres://app:${APP_DATABASE_PASSWORD}@postgres:5432/app_production
       REDIS_URL: redis://redis:6379/0
       RIOT_API_KEY: ${RIOT_API_KEY}
+      APP_HOST: ${APP_HOST}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,6 +84,8 @@ services:
       DATABASE_URL: postgres://app:${APP_DATABASE_PASSWORD}@postgres:5432/app_production
       REDIS_URL: redis://redis:6379/0
       RIOT_API_KEY: ${RIOT_API_KEY}
+      APP_HOST: ${APP_HOST}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
     depends_on:
       postgres:
         condition: service_healthy
