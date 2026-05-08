@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Down for maintenance — LoL Wrapped</title>
+    <style>
+        :root {
+            --bg: #0b0b0c;
+            --fg: #ededed;
+            --muted: #6b6b70;
+            --rule: #1d1d20;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body {
+            font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+            background: var(--bg);
+            color: var(--fg);
+            font-size: 14px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        main {
+            width: 100%;
+            max-width: 32rem;
+        }
+        .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--rule);
+        }
+        .row:last-of-type { border-bottom: none; }
+        .label { color: var(--muted); }
+        .status {
+            color: #f5b944;
+        }
+        h1 {
+            font-family: ui-monospace, "SF Mono", monospace;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 2rem;
+            letter-spacing: -0.01em;
+        }
+        h1::before {
+            content: "$ ";
+            color: var(--muted);
+        }
+        p {
+            color: var(--muted);
+            margin-top: 2rem;
+        }
+        p span { color: var(--fg); }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>wrappedlol.com --status</h1>
+        <div class="row"><span class="label">service</span><span>wrappedlol.com</span></div>
+        <div class="row"><span class="label">status</span><span class="status">503 — maintenance</span></div>
+        <div class="row"><span class="label">retry</span><span>~5 min</span></div>
+        <p>Pushing an update. <span>Refresh shortly.</span></p>
+    </main>
+</body>
+</html>

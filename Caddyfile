@@ -1,6 +1,27 @@
 # wrappedlol.com – Caddy handles HTTPS automatically via Let's Encrypt
 # DNS: Add A records for @ and www pointing to your droplet IP
+#
+# Maintenance mode: `touch maintenance/maintenance.flag` on the host to enable.
+# `rm` the flag to disable. No reload required — Caddy re-checks every request.
 
 wrappedlol.com www.wrappedlol.com {
-    reverse_proxy web:3000
+    @maintenance file /srv/maintenance.flag
+    handle @maintenance {
+        error 503
+    }
+
+    handle {
+        reverse_proxy web:3000
+    }
+
+    handle_errors {
+        @maint expression {http.error.status_code} == 503
+        handle @maint {
+            root * /srv
+            rewrite * /maintenance.html
+            header Retry-After "300"
+            header Cache-Control "no-store"
+            file_server
+        }
+    }
 }

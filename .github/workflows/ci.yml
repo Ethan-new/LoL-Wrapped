@@ -85,8 +85,19 @@ jobs:
           # ssh-action default command_timeout is 10m — insufficient for docker compose build on a small VPS.
           command_timeout: 60m
           script: |
+            set -e
             cd ~/LoL-Wrapped
+            # Always clear the maintenance flag on exit, even if a step below fails —
+            # otherwise a broken deploy leaves the site stuck on the 503 page.
+            trap 'rm -f maintenance/maintenance.flag' EXIT
+
             git pull origin main
+            mkdir -p maintenance
+            touch maintenance/maintenance.flag
+
+            # Make sure Caddy is running with the maintenance volume mounted (no-op if already up).
+            docker compose -f docker-compose.prod.yml --env-file .env up -d caddy
+
             docker compose -f docker-compose.prod.yml --env-file .env build web sidekiq_ingest sidekiq_compute
             docker compose -f docker-compose.prod.yml stop web sidekiq_ingest sidekiq_compute || true
             docker compose -f docker-compose.prod.yml rm -f web sidekiq_ingest sidekiq_compute || true
