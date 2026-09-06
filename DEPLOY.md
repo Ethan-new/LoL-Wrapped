@@ -126,6 +126,16 @@ docker compose -f docker-compose.prod.yml --env-file .env build web sidekiq_inge
 docker compose -f docker-compose.prod.yml --env-file .env up -d
 ```
 
+### One-time note: the Redis 7 → 8 upgrade
+
+The first deploy after the `redis:8-alpine` bump recreates the Redis container on the
+existing `redis_data` volume. Redis 8 reads a Redis 7 RDB without any migration step, so
+nothing needs doing up front.
+
+It is a one-way trip, though. Once Redis 8 has written its own RDB, rolling the tag back
+to `redis:7-alpine` may fail to load the dump file. If you need to roll the app back after
+this deploy, roll back the app image and leave Redis on 8.
+
 ## Auto-deploy from main
 
 The CI workflow deploys automatically when you push to `main`, but only if Brakeman, RuboCop, and importmap audit pass.
