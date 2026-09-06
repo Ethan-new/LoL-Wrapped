@@ -10,3 +10,10 @@ updates:
   schedule:
     interval: daily
   open-pull-requests-limit: 10
+# Watches the base image in Dockerfile and the service images in
+# docker-compose.yml / docker-compose.prod.yml, which otherwise drift unmonitored.
+- package-ecosystem: docker
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10

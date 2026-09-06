@@ -5,7 +5,7 @@
 # docker run -d -p 80:80 -p 443:443 --name my-app -e RAILS_MASTER_KEY=<value from config/master.key> my-app
 
 # Make sure RUBY_VERSION matches the Ruby version in .ruby-version
-ARG RUBY_VERSION=3.4.5
+ARG RUBY_VERSION=4.0.6
 FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
 
 # Rails app lives here
@@ -32,7 +32,7 @@ RUN apt-get update -qq && \
 
 # Install application gems (pin Bundler to Gemfile.lock BUNDLED WITH — skips image default reinstalling Bundler)
 COPY Gemfile Gemfile.lock ./
-ARG BUNDLER_VERSION=2.4.19
+ARG BUNDLER_VERSION=4.0.20
 RUN gem install bundler -v ${BUNDLER_VERSION} && \
     bundle _${BUNDLER_VERSION}_ install && \
     rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
